@@ -20,6 +20,7 @@ error_message() {
 
 error() {
     error_message "$@"
+    rm -rf $SITE_DIR/
     exit 1
 }
 
@@ -32,12 +33,12 @@ info_message() {
 verbose_message() {
     local message
 
-    if [ $# -ne 1 ]
+    if [[ $# -ne 1 ]]
     then
         error "(INTERNAL) incorrect arguments to \`verbose_message(message)\`."
     fi
 
-    if [ $VERBOSE -ne 1 ]
+    if [[ $VERBOSE -ne 1 ]]
     then
         return
     fi
@@ -51,7 +52,7 @@ verbose_message() {
 handle_includes() {
     local page page_content include_body
 
-    if [ $# -ne 1 ]
+    if [[ $# -ne 1 ]]
     then
         error "(INTERNAL): incorrect arguments to \`handle_includes(src_page_path)\`."
     fi
@@ -62,10 +63,9 @@ handle_includes() {
     for include in $(sed -nE 's/@include (.+)/\1/p' $src_page_path)
     do
         # Check if include exists.
-        if [ ! -f $TEMPLATES_DIR/$include ]
+        if [[ ! -f $TEMPLATES_DIR/$include ]]
         then
-            error "missing import in '$src_page_path': file '$TEMPLATES_DIR/$include' does not" \
-                "exist."
+            error "$src_page_path: file '$TEMPLATES_DIR/$include' does not exist (missing import.)"
         fi
 
         # We need to handle includes recursively.
@@ -88,7 +88,7 @@ handle_includes() {
             | sed --expression='s/\\/\\n/g' \
             | sed --expression='s/\//\\\//g' \
         )"
-        page_content="$(sed "s/@include $include/$include_body/g" $page)"
+        page_content="$(sed "s/@include $include/$include_body/g" $src_page_path)"
     done
 
     echo "$page_content"
@@ -96,27 +96,88 @@ handle_includes() {
 
 
 generate_page() {
-    local src_path rel_src_path dest_dir dest_path rel_dest_path
+    local src_page_path rel_src_page_path dest_page_dir dest_page_path rel_dest_page_path \
+        page_content
 
-    if [ $# -ne 1 ]
+    if [[ $# -ne 1 ]]
     then
         error "(INTERNAL) incorrect arguments to \`generate_page(src_page_path)\`."
     fi
 
-    src_path="$1"
-    rel_src_path="$(realpath --relative-to=$WORKING_DIR $src_path)"
-    dest_dir="$SITE_DIR/$(dirname $rel_src_path)" 
+    src_page_path="$1"
+    rel_src_page_path="$(realpath --relative-to=$WORKING_DIR $src_page_path)"
+    dest_page_path="$SITE_DIR/$rel_src_page_path"
+    verbose_message "  Generating page '$rel_src_page_path'..."
 
-    mkdir -p $dest_dir
+    verbose_message "    Handling includes..."
+    page_content="$(handle_includes $src_page_path)"
+    verbose_message "    Resolving permalinks..."
+    # Handle permalinks.
+    #
+    # Permalinks are registered via `@permalink <LINK>`. `<LINK>` needs to be an absolute path with
+    # regards to the site root (i.e., needs to start with '/'). If there are multiple permalinks,
+    # only the last one will be taken into account.
+    raw_permalink="$( \
+        echo "$page_content" | sed -nE --expression='s/@permalink (.+)/\1/p' | tail -n1 \
+    )"
+    # Remove any permalink(s) from the file.
+    page_content="$(echo "$page_content" | sed -E --expression='/@permalink .+/d')"
+    permalink="$raw_permalink"
+    # Make sure the permalink is an absolute path (i.e., starts with slash).
+    if [[ -n $permalink ]] && [[ $(echo $permalink | cut -b1) != "/" ]]
+    then
+        error "$src_page_path: permalink must be an absolute path (starting with '/')."
+    fi
+    # Make sure to normalize the permalink, by ensuring that it ends in ".html"/".htm".
+    permalink="$(if [[ -n $permalink ]] && [[ $permalink != *.htm ]] && [[ $permalink != *.html ]]
+        then
+            echo "$permalink.html"
+        else
+            echo "$permalink"
+        fi)"
 
-    dest_path="$dest_dir/$(basename $src_path)"
-    rel_dest_path="$(realpath --relative-to=$SITE_DIR $dest_path)"
 
+    dest_page_path="$(if [[ -n $permalink ]]
+        then
+            echo "$SITE_DIR/$permalink"
+        else
+            echo "$dest_page_path"
+        fi)"
 
-    verbose_message \
-        "  Generating page '$rel_src_path' -> '$SITE_DIR_NAME/$rel_dest_path'..."
-    content="$(handle_includes $src_path)"
-    echo "$content" > "$dest_path"
+    # At this point, we still need to check if the permalink escapes the $SITE_DIR.
+    # This is a quite obvious vulnerability: if someone uses `/../something` as a permalink, then
+    # we will naively generate a file outside $SITE_DIR.
+    #
+    # In order to check that we are not doing this, we need to use `realpath` to resolve the final
+    # path produced by the permalink. However, `realpath` will not work until the path is, well,
+    # real.
+    #
+    # To get around that, we need to first *create the dest directory anyway*, and then test with
+    # `realpath`. If it turns out that we have escaped $SITE_DIR, we can roll back that last action
+    # by removing the directory we just created.
+    #
+    # This temporary directory should not be a security issue. Since it is created with `mkdir -p`,
+    # it cannot overwrite existing data. At worst, an empty directory will be temporarily created
+    # outside $SITE_DIR, and will almost immediately be cleaned up.
+    dest_page_dir="$(dirname $dest_page_path)"
+    mkdir -p $dest_page_dir/
+    # Finally check that the permalink does not escape the $SITE_DIR.
+    if [[ -n $permalink ]] && \
+        [[ \
+            $(realpath -L \
+                $SITE_DIR/$(realpath --relative-to=$SITE_DIR $SITE_DIR/$permalink) \
+            )/ != $SITE_DIR/* \
+        ]]
+    then
+        # Roll back the temporary directory creation.
+        rm -rf $dest_page_dir/
+        error "$src_page_path: permalink '$raw_permalink' escapes the generated site directory" \
+            "'$SITE_DIR'."
+    fi
+
+    rel_dest_page_path="$(realpath --relative-to=$SITE_DIR $dest_page_path)"
+    verbose_message "    Putting page in '$SITE_DIR_NAME/$rel_dest_page_path'..."
+    echo "$page_content" > "$dest_page_path"
 }
 
 
