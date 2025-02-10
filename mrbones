@@ -49,49 +49,104 @@ verbose_message() {
 }
 
 
-handle_includes() {
-    local page page_content include_body
+escape_newlines_and_slashes() {
+    # Since `sed` works on a per-line basis, we can't directly replace newlines with their escaped
+    # counterpart. So, we do it in two steps: first we use `tr` to transform '\n's to '\\'s, and
+    # then we use `sed` to finish the job by transforming '\\'s to '\\n's.
+    #
+    # We also have to escape '/'s (used in closing HTML tags), as `sed` will mistake them to be
+    # separators in the regular expression.
+    echo "$(echo "$@" | tr '\n' '\\' | sed 's/\\/\\n/g' | sed 's/\//\\\//g')"
+}
 
-    if [[ $# -ne 1 ]]
+
+handle_use_directive() {
+    local page_content src_page_path use_template use_template_content
+
+    if [[ $# -ne 2 ]]
     then
-        error "(INTERNAL): incorrect arguments to \`handle_includes(src_page_path)\`."
+        error \
+            "(INTERNAL): incorrect arguments to" \
+            "\`handle_use_directive(page_content, src_page_path)\`."
     fi
 
-    src_page_path=$1
+    page_content="$1"
+    src_page_path="$2"
+    verbose_message "    Handling \`@use\`s for $src_page_path..."
 
-    page_content="$(cat $src_page_path)"
-    for include in $(sed -nE 's/@include (.+)/\1/p' $src_page_path)
+    # If there are multiple `@use`s, only the last one will be taken into account.
+    use_template="$( \
+        echo "$page_content" | sed -nE 's/@use (.+)/\1/p' | tail -n1 \
+    )"
+
+    # No `@use`s, so nothing to do.
+    if [[ -z $use_template ]]
+    then
+        echo "$page_content"
+        return
+    fi
+
+    # Remove any `@use`s from the file.
+    page_content="$(echo "$page_content" | sed -E '/@use .+/d')"
+
+    use_template_path="$TEMPLATES_DIR/$use_template"
+    # Load the template.
+    if [[ ! -f $use_template_path ]]
+    then
+        error "$src_page_path: file '$use_template_path' does not exist (missing \`@use\` target.)"
+    fi
+
+    use_template_content="$(cat $use_template_path)"
+    # Make sure to handle any `@include`s in the template.
+    use_template_content="$( \
+        handle_include_directive "$use_template_content" "$use_template_path" \
+    )"
+    # Handle `@use`s recursively.
+    use_template_content="$(handle_use_directive "$use_template_content" "$use_template_path")"
+
+    # Replace "@content" by the current page content in the template. This becomes the content of
+    # the final page.
+    page_content="$(escape_newlines_and_slashes "$page_content")"
+    page_content="$(echo "$use_template_content" | sed -E "s/@content/$page_content/g")"
+
+    echo -e "$page_content"
+}
+
+
+handle_include_directive() {
+    local page page_content include_body
+
+
+    if [[ $# -ne 2 ]]
+    then
+        error \
+            "(INTERNAL): incorrect arguments to " \
+            "\`handle_include_directive(page_content, src_page_path)\`."
+    fi
+
+    page_content="$1"
+    src_page_path="$2"
+    verbose_message "    Handling \`@include\`s for $src_page_path..."
+
+    for include in $(echo "$page_content" | sed -nE 's/@include (.+)/\1/p')
     do
+        include_path="$TEMPLATES_DIR/$include"
         # Check if include exists.
-        if [[ ! -f $TEMPLATES_DIR/$include ]]
+        if [[ ! -f $include_path ]]
         then
-            error "$src_page_path: file '$TEMPLATES_DIR/$include' does not exist (missing import.)"
+            error "$src_page_path: file '$include_path' does not exist (missing \`@include\`" \
+                "target.)"
         fi
 
+        include_body="$(cat "$include_path")"
         # We need to handle includes recursively.
-        include_body=$(handle_includes $TEMPLATES_DIR/$include)
+        include_body=$(handle_include_directive "$include_body" "$include_path")
         # Replace the `"@include (.+)"` string by the file in the captured group.
-        #
-        # We need to escape newlines from the template file to be able to feed it to `sed` (i.e.,
-        # '\n' -> '\\n'), otherwise it would break up the line and make `sed` think the input is
-        # incomplete.
-        #
-        # However, since `sed` works on a per-line basis, we can't directly replace newlines with
-        # their escaped counterpart. So, we do it in two steps: first we use `tr` to transform
-        # '\n's to '\\'s, and then we use `sed` to finish the job by transforming '\\'s to '\\n's.
-        #
-        # Incidentally, we also have to escape '/'s (used in closing HTML tags), as `sed` will
-        # mistake them to be separators in the regular expression.
-        include_body="$( \
-            echo "$include_body" \
-            | tr '\n' '\\' \
-            | sed --expression='s/\\/\\n/g' \
-            | sed --expression='s/\//\\\//g' \
-        )"
-        page_content="$(sed "s/@include $include/$include_body/g" $src_page_path)"
+        include_body="$(escape_newlines_and_slashes "$include_body")"
+        page_content="$(echo "$page_content" | sed -E "s/@include $include/$include_body/g")"
     done
 
-    echo "$page_content"
+    echo -e "$page_content"
 }
 
 
@@ -108,20 +163,19 @@ generate_page() {
     rel_src_page_path="$(realpath --relative-to=$WORKING_DIR $src_page_path)"
     dest_page_path="$SITE_DIR/$rel_src_page_path"
     verbose_message "  Generating page '$rel_src_page_path'..."
+    page_content=$(cat $src_page_path)
 
-    verbose_message "    Handling includes..."
-    page_content="$(handle_includes $src_page_path)"
-    verbose_message "    Resolving permalinks..."
+    verbose_message "    Resolving destination (permalink)..."
     # Handle permalinks.
     #
     # Permalinks are registered via `@permalink <LINK>`. `<LINK>` needs to be an absolute path with
     # regards to the site root (i.e., needs to start with '/'). If there are multiple permalinks,
     # only the last one will be taken into account.
     raw_permalink="$( \
-        echo "$page_content" | sed -nE --expression='s/@permalink (.+)/\1/p' | tail -n1 \
+        echo "$page_content" | sed -nE 's/@permalink (.+)/\1/p' | tail -n1 \
     )"
     # Remove any permalink(s) from the file.
-    page_content="$(echo "$page_content" | sed -E --expression='/@permalink .+/d')"
+    page_content="$(echo "$page_content" | sed -E '/@permalink .+/d')"
     permalink="$raw_permalink"
     # Make sure the permalink is an absolute path (i.e., starts with slash).
     if [[ -n $permalink ]] && [[ $(echo $permalink | cut -b1) != "/" ]]
@@ -142,6 +196,12 @@ generate_page() {
         else
             echo "$dest_page_path"
         fi)"
+
+    # Handle any `@use`s in the page.
+    page_content="$(handle_use_directive "$page_content" "$src_page_path")"
+    # Make sure to handle any `@include`s in the final result.
+    # We need to do this, as the source page file itself might have some `@include`s.
+    page_content="$(handle_include_directive "$page_content" "$src_page_path")"
 
     # At this point, we still need to check if the permalink escapes the $SITE_DIR.
     # This is a quite obvious vulnerability: if someone uses `/../something` as a permalink, then
