@@ -1,0 +1,204 @@
+#!/usr/bin/env bash
+
+
+VERSION="0.1.0"
+set -e
+
+TEMPLATES_DIR_NAME="_templates"
+SITE_DIR_NAME="_site"
+VERBOSE=0
+WORKING_DIR=$PWD
+
+TEMPLATES_DIR="$WORKING_DIR/$TEMPLATES_DIR_NAME"
+SITE_DIR="$WORKING_DIR/$SITE_DIR_NAME"
+
+
+error_message() {
+    local message
+
+    if [ $# -ne 1 ]
+    then
+        echo -e "\e[1m[mrbones]\e[0m  \e[31mERROR: (INTERNAL) incorrect arguments to" \
+                     "\`error_message(message)\`.\e[0m" 1>&2
+        exit 1
+    fi
+
+    message="$1"
+
+    echo -e "\e[1m[mrbones]\e[0m  \e[31mERROR: $message\e[0m" 1>&2
+}
+
+
+error() {
+    local message
+
+    if [ $# -ne 1 ]
+    then
+        error_message "(INTERNAL) incorrect arguments to \`error(message)\`."
+        exit 1
+    fi
+
+    message="$1"
+
+    error_message "$message"
+    exit 1
+}
+
+
+info_message() {
+    local message
+
+    if [ $# -ne 1 ]
+    then
+        error "(INTERNAL) incorrect arguments to \`info_message(message)\`."
+    fi
+
+    message=$1
+
+    echo -e "\e[1m[mrbones]\e[0m  \e[32m$message\e[0m" 1>&2
+}
+
+
+verbose_message() {
+    local message
+
+    if [ $# -ne 1 ]
+    then
+        error "(INTERNAL) incorrect arguments to \`verbose_message(message)\`."
+    fi
+
+    if [ $VERBOSE -ne 1 ]
+    then
+        return
+    fi
+
+    message=$1
+
+    echo -e "\e[1m[mrbones]\e[0m  \e[38;5;244m$message\e[0m" 1>&2
+}
+
+
+handle_includes() {
+    local page page_content include_body
+
+    if [ $# -ne 1 ]
+    then
+        error "(INTERNAL): incorrect arguments to \`handle_includes(src_page_path)\`."
+    fi
+
+    page=$1
+
+    page_content="$(cat $page)"
+    for include in $(sed -nE 's/@include (.+)/\1/p' $page)
+    do
+        # Check if include exists.
+        if [ ! -f $TEMPLATES_DIR/$include ]
+        then
+            error "missing import in '$page': file '$TEMPLATES_DIR/$include' does not exist."
+        fi
+
+        # We need to handle includes recursively.
+        include_body=$(handle_includes $TEMPLATES_DIR/$include)
+        # Replace the `"@include (.+)"` string by the file in the captured group.
+        #
+        # We need to escape newlines from the template file to be able to feed it to `sed` (i.e.,
+        # '\n' -> '\\n'), otherwise it would break up the line and make `sed` think the input is
+        # incomplete.
+        #
+        # However, since `sed` works on a per-line basis, we can't directly replace newlines with
+        # their escaped counterpart. So, we do it in two steps: first we use `tr` to transform
+        # '\n's to '\\'s, and then we use `sed` to finish the job by transforming '\\'s to '\\n's.
+        #
+        # Incidentally, we also have to escape '/'s (used in closing HTML tags), as `sed` will
+        # mistake them to be separators in the regular expression.
+        include_body="$( \
+            echo "$include_body" \
+            | tr '\n' '\\' \
+            | sed --expression='s/\\/\\n/g' \
+            | sed --expression='s/\//\\\//g' \
+        )"
+        page_content="$(sed "s/@include $include/$include_body/g" $page)"
+    done
+
+    echo "$page_content"
+}
+
+
+generate_page() {
+    local src_path rel_src_path dest_dir dest_path rel_dest_path
+
+    if [ $# -ne 1 ]
+    then
+        error "(INTERNAL) incorrect arguments to \`generate_page(src_page_path)\`."
+    fi
+
+    src_path="$1"
+    rel_src_path="$(realpath --relative-to=$WORKING_DIR $src_path)"
+    dest_dir="$SITE_DIR/$(dirname $rel_src_path)" 
+
+    mkdir -p $dest_dir
+
+    dest_path="$dest_dir/$(basename $src_path)"
+    rel_dest_path="$(realpath --relative-to=$SITE_DIR $dest_path)"
+
+
+    verbose_message \
+        "  Generating page '$rel_src_path' -> '$SITE_DIR_NAME/$rel_dest_path'..."
+    content="$(handle_includes $src_path)"
+    echo "$content" > "$dest_path"
+}
+
+
+parse_arguments() {
+    for argument in "$@"
+    do
+        case $argument in
+            "-h" | "--help")
+                echo -e "mrbones - a barebones static site generator\n" \
+                    "\nusage: mrbones [option(s)]" \
+                    "\n  -h, --help     print this help message" \
+                    "\n  -v, --verbose  print more verbose messages" \
+                    "\n  -V, --version  print this program's version number"
+                exit 0
+                ;;
+            "-v" | "--verbose")
+                VERBOSE=1
+                ;;
+            "-V" | "--version")
+                echo "mrbones $VERSION" 1>&2
+                exit 0
+                ;;
+            *)
+                WORKING_DIR="$(realpath $argument)"
+                TEMPLATES_DIR="$WORKING_DIR/$TEMPLATES_DIR_NAME"
+                SITE_DIR="$WORKING_DIR/$SITE_DIR_NAME"
+                ;;
+        esac
+
+    done
+}
+
+
+main() {
+    parse_arguments "$@"
+
+    info_message "Setting up output directory '$SITE_DIR'..."
+    verbose_message "  Removing '$SITE_DIR/'..."
+    rm -rf "$SITE_DIR"
+    verbose_message "  Creating '$SITE_DIR/'..."
+    mkdir -p "$SITE_DIR"
+
+    info_message "Generating pages..."
+    for src_page in $( \
+        find $WORKING_DIR -name "*.html" \
+            -not -path "$SITE_DIR/*" \
+            -not -path "$TEMPLATES_DIR/*" \
+    )
+    do
+        generate_page "$src_page"
+    done
+
+    info_message "Done! Site is ready at '$SITE_DIR'."
+}
+
+main "$@"
