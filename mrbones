@@ -136,7 +136,6 @@ generate_page() {
             echo "$permalink"
         fi)"
 
-
     dest_page_path="$(if [[ -n $permalink ]]
         then
             echo "$SITE_DIR/$permalink"
@@ -177,7 +176,28 @@ generate_page() {
 
     rel_dest_page_path="$(realpath --relative-to=$SITE_DIR $dest_page_path)"
     verbose_message "    Putting page in '$SITE_DIR_NAME/$rel_dest_page_path'..."
+
     echo "$page_content" > "$dest_page_path"
+    # In order to support links that do not end in ".html"/".htm", we should generate dummy
+    # `index.html` pages that enable directories to work as pages.
+    #
+    # For example, if there is a page `/stuff/things.html`, then `/stuff/things` will lead to a 404
+    # by default. By creating a copy of the same page in `/stuff/things/index.html`, we enable that
+    # last URL to work as intended.
+    #
+    # This procedure shall be done on all pages except the root '/' (as there already is an
+    # `index.html` there).
+    if [[ $rel_dest_page_path != "index.html" ]]
+    then
+        page_name="$(basename $dest_page_path)"
+        dest_copy_path="$dest_page_dir/${page_name%.*}/index.html"
+        dest_copy_dir="$(dirname $dest_copy_path)"
+        mkdir -p $dest_copy_dir/
+
+        rel_dest_copy_path="$(realpath --relative-to=$SITE_DIR $dest_copy_path)"
+        verbose_message "    Creating page copy in '$SITE_DIR_NAME/$rel_dest_copy_path'..."
+        echo "$page_content" > "$dest_copy_path"
+    fi
 }
 
 
