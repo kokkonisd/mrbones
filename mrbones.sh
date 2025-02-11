@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 
 
+## mrbones --- a bare-bones static site generator
+## mrbones by Dimitri Kokkonis  is licensed under a Creative Commons Attribution-ShareAlike 4.0
+## International License. See the accompanying LICENSE file for more info.
+
+
 VERSION="0.1.0-dev"
 set -e
 
@@ -55,6 +60,7 @@ should_use_color() {
     esac
 }
 
+# Print an error message to `stderr`.
 error_message() {
     if should_use_color
     then
@@ -65,6 +71,7 @@ error_message() {
 }
 
 
+# Print an error message to `stderr` and exit with code 1.
 error() {
     error_message "$@"
     rm -rf $SITE_DIR/
@@ -72,6 +79,7 @@ error() {
 }
 
 
+# Print an info message to `stderr`.
 info_message() {
     if should_use_color
     then
@@ -82,6 +90,7 @@ info_message() {
 }
 
 
+# Print a verbose message to `stderr`.
 verbose_message() {
     local message
 
@@ -99,6 +108,9 @@ verbose_message() {
 }
 
 
+# Escape newlines and slashes from a string.
+#
+# This is used to be able to use strings (potentially containing newlines and slashes) in `sed`.
 escape_newlines_and_slashes() {
     # Since `sed` works on a per-line basis, we can't directly replace newlines with their escaped
     # counterpart. So, we do it in two steps: first we use `tr` to transform '\n's to '\\'s, and
@@ -110,6 +122,25 @@ escape_newlines_and_slashes() {
 }
 
 
+# Handle `@use` directives.
+#
+# `@use` directives are defined in page or template files, and dictate which template file to use
+# as a basis, replacing the `@content` directive in it with the content of the page using the
+# `@use` directive.
+#
+# For example, consider the following pages and templates as well as their content:
+# - `_templates/skeleton.html`: "<html>@content</html>"
+# - `_templates/main.html`: "@use skeleton.html\n<body>@content</body>"
+# - `index.html`: "@use main.html\n<p>Hello!</p>"
+#
+# The generated `_site/index.html` file will have the following content:
+#     "<html><body><p>Hello!</p></body></html>"
+#
+# A few ground rules:
+# - At most one `@use` per line;
+# - Only the last `@use` in a file is taken into account;
+# - At least one `@content` in the template referenced by `@use`;
+# - `@use` directives can be stacked across templates (like in the example above).
 handle_use_directive() {
     local page_content src_page_path use_template use_template_content
 
@@ -163,6 +194,22 @@ handle_use_directive() {
 }
 
 
+# Handle `@include` directives.
+#
+# `@include` directives are defined in page or template files, and lead to a verbatim copy of the
+# content of the referenced template to be put in the page or template issuing the `@include`.
+#
+# For example, consider the following pages and templates as well as their content:
+# - `_templates/one.html`: "<p>One</p>"
+# - `_templates/two.html`: "@include one.html\n<p>Two</p>"
+# - `index.html`: "@include two.html\n<p>Three</p>"
+#
+# The generated `_site/index.html` file will have the following content:
+#     "<p>One</p>\n<p>Two</p>\n<p>Three<\p>"
+#
+# A few ground rules:
+# - At most one `@include` per line;
+# - `@include` directives can be stacked across templates (like in the example above).
 handle_include_directive() {
     local page page_content include_body
 
@@ -200,6 +247,10 @@ handle_include_directive() {
 }
 
 
+# Generate a page for the final site.
+#
+# All HTML pages (with extension ".html" or ".htm") are taken into account. Directives understood
+# by `mrbones` are expanded.
 generate_page() {
     local src_page_path rel_src_page_path dest_page_dir dest_page_path rel_dest_page_path \
         page_content
@@ -311,6 +362,7 @@ generate_page() {
 }
 
 
+# Parse arguments to `mrbones`.
 parse_arguments() {
     while [[ $# > 0 ]]
     do
@@ -369,6 +421,7 @@ parse_arguments() {
 }
 
 
+# Run `mrbones`.
 main() {
     parse_arguments "$@"
 
