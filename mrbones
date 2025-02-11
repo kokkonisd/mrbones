@@ -300,6 +300,11 @@ main() {
     verbose_message "  Creating '$SITE_DIR/'..."
     mkdir -p "$SITE_DIR"
 
+    info_message "Copying site content..."
+    # Make sure to *not* copy templates and the output site directory.
+    rsync -a "$WORKING_DIR"/* "$SITE_DIR" \
+        --exclude "$TEMPLATES_DIR_NAME" --exclude "$SITE_DIR_NAME"
+
     info_message "Generating pages..."
     for src_page in $( \
         find $WORKING_DIR -name "*.html" \
