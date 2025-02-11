@@ -277,7 +277,7 @@ parse_arguments() {
                 VERBOSE=1
                 ;;
             "-V" | "--version")
-                echo "mrbones $VERSION" 1>&2
+                echo "mrbones $VERSION"
                 exit 0
                 ;;
             *)
