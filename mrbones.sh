@@ -7,14 +7,61 @@ set -e
 TEMPLATES_DIR_NAME="_templates"
 SITE_DIR_NAME="_site"
 VERBOSE=0
+# The following values are used for color:
+# - 0: never
+# - 1: auto (sensible defaults)
+# - 2: always
+USE_COLOR=1
 WORKING_DIR=$PWD
 
 TEMPLATES_DIR="$WORKING_DIR/$TEMPLATES_DIR_NAME"
 SITE_DIR="$WORKING_DIR/$SITE_DIR_NAME"
 
+# Check globally if we're in a tty. This should be done here because inside a function the context
+# at the callsite may change the result.
+IS_TTY=0
+if [ -t 1 ]
+then
+    IS_TTY=1
+fi
+
+
+# Decide if we should use colors in the output.
+#
+# This follows the standard described in http://bixense.com/clicolors/.
+should_use_color() {
+    case $USE_COLOR in
+        0)
+            return 1  # False
+            ;;
+        1)
+            if [[ $NO_COLOR ]]
+            then
+                return 1  # False
+            # `-t 1` tests if we're in a TTY.
+            elif [[ ($CLICOLOR_FORCE) || ($IS_TTY == 1) ]]
+            then
+                return 0  # True
+            else
+                return 1  # False
+            fi
+            ;;
+        2)
+            return 0  # True
+            ;;
+        *)
+            error "(INTERNAL): invalid value '$USE_COLOR' for \$USE_COLOR."
+            ;;
+    esac
+}
 
 error_message() {
-    echo -e "\e[1m[mrbones]\e[0m  \e[31mERROR: $@\e[0m" 1>&2
+    if should_use_color
+    then
+        echo -e "\e[1m[mrbones]\e[0m  \e[31mERROR: $@\e[0m" 1>&2
+    else
+        echo "[mrbones]  ERROR: $@" 1>&2
+    fi
 }
 
 
@@ -26,26 +73,29 @@ error() {
 
 
 info_message() {
-    echo -e "\e[1m[mrbones]\e[0m  \e[32m$@\e[0m" 1>&2
+    if should_use_color
+    then
+        echo -e "\e[1m[mrbones]\e[0m  \e[32m$@\e[0m" 1>&2
+    else
+        echo "[mrbones]  $@" 1>&2
+    fi
 }
 
 
 verbose_message() {
     local message
 
-    if [[ $# -ne 1 ]]
-    then
-        error "(INTERNAL) incorrect arguments to \`verbose_message(message)\`."
-    fi
-
     if [[ $VERBOSE -ne 1 ]]
     then
         return
     fi
 
-    message=$1
-
-    echo -e "\e[1m[mrbones]\e[0m  \e[38;5;244m$message\e[0m" 1>&2
+    if should_use_color
+    then
+        echo -e "\e[1m[mrbones]\e[0m  \e[38;5;244m$@\e[0m" 1>&2
+    else
+        echo "[mrbones]  $@" 1>&2
+    fi
 }
 
 
@@ -262,31 +312,59 @@ generate_page() {
 
 
 parse_arguments() {
-    for argument in "$@"
+    while [[ $# > 0 ]]
     do
-        case $argument in
+        case $1 in
+            "--color")
+                case $2 in
+                    "always")
+                        USE_COLOR=2
+                        ;;
+                    "auto")
+                        USE_COLOR=1
+                        ;;
+                    "never")
+                        USE_COLOR=0
+                        ;;
+                    *)
+                        error "unrecognized value '$2' for option '--color'." \
+                            "Try \`mrbones --help\` for more information."
+                esac
+                # Skip over `--color` and its argument.
+                shift
+                shift
+                ;;
             "-h" | "--help")
                 echo -e "mrbones - a barebones static site generator\n" \
                     "\nusage: mrbones [option(s)]" \
-                    "\n  -h, --help     print this help message" \
-                    "\n  -v, --verbose  print more verbose messages" \
-                    "\n  -V, --version  print this program's version number"
+                    "\n  --color=<WHEN>  specify when color should be used:" \
+                    "\n                  - never: color is never used" \
+                    "\n                  - auto: sensible defaults apply" \
+                    "\n                  - always: color is always used" \
+                    "\n  -h, --help      print this help message" \
+                    "\n  -v, --verbose   print more verbose messages" \
+                    "\n  -V, --version   print this program's version number"
                 exit 0
                 ;;
             "-v" | "--verbose")
                 VERBOSE=1
+                # Skip over `-v`/`--verbose`.
+                shift
                 ;;
             "-V" | "--version")
                 echo "mrbones $VERSION"
                 exit 0
                 ;;
+            -* | --*)
+                error "unrecognized option '$1'." \
+                    "Try \`mrbones --help\` for more information."
+                ;;
             *)
-                WORKING_DIR="$(realpath $argument)"
+                WORKING_DIR="$(realpath $1)"
                 TEMPLATES_DIR="$WORKING_DIR/$TEMPLATES_DIR_NAME"
                 SITE_DIR="$WORKING_DIR/$SITE_DIR_NAME"
                 ;;
         esac
-
     done
 }
 
