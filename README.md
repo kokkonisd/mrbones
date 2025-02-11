@@ -11,8 +11,7 @@ Currently, `mrbones` is only supported on Linux systems. It has the following de
 You can use the [Makefile](./Makefile) to install/uninstall `mrbones`:
 ```console
 $ sudo make install    # you can also use DESTDIR to specify *where* to install
-$ sudo make uninstall  # if you defined an alternative DESTDIR during installation, \
-                       # you'll have to specify it here too
+$ sudo make uninstall  # use same DESTDIR as for `make install`
 ```
 
 ## Use
