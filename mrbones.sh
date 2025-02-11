@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 
-VERSION="0.1.0"
+VERSION="0.1.0-dev"
 set -e
 
 TEMPLATES_DIR_NAME="_templates"
