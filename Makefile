@@ -8,4 +8,4 @@ install:
 	install $(SOURCE) $(DESTDIR)/$(TARGET)
 
 uninstall:
-	rm -f $(DESTDIR)/$(TARGET)
+	rm $(DESTDIR)/$(TARGET)
