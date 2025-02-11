@@ -1,5 +1,5 @@
 # mrbones
-A bare-bones static site generator in the form of a **single bash script**.
+A bare-bones static site generator in the form of a **single Bash script**.
 
 ## Installation
 ### Dependencies
