@@ -9,3 +9,6 @@ install:
 
 uninstall:
 	rm $(DESTDIR)/$(TARGET)
+
+test:
+	bash run-tests.sh

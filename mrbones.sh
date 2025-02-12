@@ -415,6 +415,8 @@ parse_arguments() {
                 WORKING_DIR="$(realpath $1)"
                 TEMPLATES_DIR="$WORKING_DIR/$TEMPLATES_DIR_NAME"
                 SITE_DIR="$WORKING_DIR/$SITE_DIR_NAME"
+                # Skip over the argument.
+                shift
                 ;;
         esac
     done
