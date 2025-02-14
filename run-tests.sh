@@ -2,68 +2,91 @@
 
 
 TMP_DIR=/tmp
-DEPENDENCIES=(sed realpath curl)
+DEPENDENCIES=(sed realpath curl python3)
+TEST_SERVER_PORT=4444
 
 MRBONES="$(realpath .)/mrbones.sh"
 TESTS_DIR="$(realpath .)/tests"
-BASELINE_DIR="$TESTS_DIR/baseline"
 HAD_FAILURES=0
 
 
-run_baseline_tests() {
+run_tests() {
     tests_passed=0
     tests_failed=0
 
-    for test_dir in $(ls -d "$BASELINE_DIR"/*)
+    for test_dir in $(ls -d "$TESTS_DIR"/*)
     do
         echo -en "\e[1mRunning\e[0m \e[38;5;244m$test_dir\e[0m \e[1m...\e[0m " 1>&2
-        passed=1
 
-        baseline_out=$(cat "$test_dir/baseline.out" 2>/dev/null || echo "")
-        baseline_err=$(cat "$test_dir/baseline.err" 2>/dev/null || echo "")
+        baseline=$(cat "$test_dir/baseline.err" 2>/dev/null || echo "")
 
         # Replace $TEST_DIR with the actual test directory in baselines.
         test_dir_escaped_slashes="$(echo "$test_dir" | sed -E 's/\//\\\//g')"
-        baseline_out=$(echo "$baseline_out" | sed -E "s/\\\$TEST_DIR/$test_dir_escaped_slashes/g")
-        baseline_err=$(echo "$baseline_err" | sed -E "s/\\\$TEST_DIR/$test_dir_escaped_slashes/g")
-
-        tmp_out_file="$TMP_DIR/mrbones.test.out"
-        tmp_err_file="$TMP_DIR/mrbones.test.err"
-
-        bash "$MRBONES" --color never "$test_dir/src" 1>"$tmp_out_file" 2>"$tmp_err_file"
-
-        actual_out="$(cat "$tmp_out_file")"
-        actual_err="$(cat "$tmp_err_file")"
-
-        # Cleanup build artifacts.
-        rm -rf "$tmp_out_file" "$tmp_err_file" "$test_dir/src/_site"
-
-        diff_out="$(diff --color=always <(echo "$baseline_out") <(echo "$actual_out"))"
-        diff_err="$(diff --color=always <(echo "$baseline_err") <(echo "$actual_err"))"
-
-        if [[ "$diff_out$diff_err" != "" ]]
+        baseline=$(echo "$baseline" | sed -E "s/\\\$TEST_DIR/$test_dir_escaped_slashes/g")
+        actual_output="$(bash "$MRBONES" --color never "$test_dir/src" 2>&1)"
+        output_diff="$(diff --color=always <(echo "$baseline") <(echo "$actual_output"))"
+        if [[ "$output_diff" != "" ]]
         then
             echo -e "\e[1m\e[31mFAIL\e[0m" 1>&2
             tests_failed=$((tests_failed + 1))
 
-            if [[ -n $diff_out ]]
-            then
-                echo -e "  \e[1m\e[91mStdout does not match baseline:\e[0m" 1>&2
-                echo "$diff_out" 1>&2
-            else
-                echo -e "  \e[1m\e[91mStderr does not match baseline:\e[0m" 1>&2
-                echo "$diff_err" 1>&2
-            fi
-        else
-            echo -e "\e[1m\e[32mPASS\e[0m" 1>&2
-            tests_passed=$((tests_passed + 1))
+            echo -e "  \e[1m\e[91mbaseline\e[39m does not match \e[32mactual output\e[39m:\e[0m"
+            echo "$output_diff" 1>&2
+            echo "" 1>&2
+            continue
         fi
 
+        # Run curl tests.
+        curl_tests_passed=1
+        # We need to spin up a server first.
+        python3 -m http.server $TEST_SERVER_PORT -d "$test_dir/src/_site" 1>/dev/null 2>&1 &
+        # Capture its PID so we can stop it later.
+        server_pid="$!"
+        # Wait for the server to start up.
+        sleep 0.5
+        # Now, run the requests with curl and check against the baseline.
+        for curl_baseline in $(ls "$test_dir"/*.curl)
+        do
+            request_baseline="$(cat $curl_baseline)"
+            request_url="$(basename $curl_baseline | sed -E -e 's/\.curl//g' -e 's/__/\//g' )"
+            request_actual_output=$( \
+                curl http://localhost:$TEST_SERVER_PORT/"$request_url" 2>/dev/null \
+            )
+            request_diff="$( \
+                diff --color=always <(echo "$request_baseline") <(echo "$request_actual_output") \
+            )"
+            if [[ "$request_diff" != "" ]]
+            then
+                echo -e "\e[1m\e[31mFAIL\e[0m" 1>&2
+                tests_failed=$((tests_failed + 1))
+
+                echo -e "  \e[1m/$request_url: \e[91mrequest baseline\e[39m does not match" \
+                    "\e[32mactual output\e[39m:\e[0m"
+                echo "$request_diff" 1>&2
+                echo "" 1>&2
+                curl_tests_passed=0
+                break
+            fi
+        done
+        # We're done with the curl tests, so we should terminate the server.
+        kill "$server_pid"
+        wait "$server_pid"
+
+        if [[ $curl_tests_passed == 0 ]]
+        then
+            continue
+        fi
+
+        echo -e "\e[1m\e[32mPASS\e[0m" 1>&2
+        tests_passed=$((tests_passed + 1))
         echo "" 1>&2
+
+        # Clean up build artifacts.
+        rm -rf "$test_dir/src/_site"
     done
 
     echo -e "┏━━━━━━━━━━━━━━━━━━┓" \
-            "\n┃ \e[1mBASELINE SUMMARY\e[0m ┃" \
+            "\n┃     \e[1mSUMMARY\e[0m      ┃" \
             "\n┣━━━━━━━┯━━━━━━━━━━┫" \
             "\n┃ \e[1m\e[32mPASS\e[0m  │ \e[1m\e[32m$(printf '%-8d' $tests_passed)\e[0m ┃" \
             "\n┠───────┼──────────┨" \
@@ -85,13 +108,14 @@ check_dependencies() {
     do
         if [[ ! $(command -v $dependency) ]]
         then
-            error "missing dependency: $dependency."
+            echo -e "\e[1m\e[31mCannot run tests. Missing dependency: $dependency.\e[0m" 1>&2
+            exit 1
         fi
     done
 }
 
 check_dependencies
-run_baseline_tests
+run_tests
 
 if [[ $HAD_FAILURES == 1 ]]
 then
