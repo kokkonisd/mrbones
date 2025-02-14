@@ -24,7 +24,7 @@ run_tests() {
         test_dir_escaped_slashes="$(echo "$test_dir" | sed -E 's/\//\\\//g')"
         baseline=$(echo "$baseline" | sed -E "s/\\\$TEST_DIR/$test_dir_escaped_slashes/g")
         actual_output="$(bash "$MRBONES" --verbose --color never "$test_dir/src" 2>&1)"
-        output_diff="$(diff --color=always -y <(echo "$baseline") <(echo "$actual_output"))"
+        output_diff="$(diff --color=always <(echo "$baseline") <(echo "$actual_output"))"
         if [[ "$output_diff" != "" ]]
         then
             echo -e "\e[1m\e[31mFAIL\e[0m" 1>&2

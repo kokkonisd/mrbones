@@ -457,6 +457,7 @@ main() {
         find $WORKING_DIR -name "*.html" \
             -not -path "$SITE_DIR/*" \
             -not -path "$TEMPLATES_DIR/*" \
+        | sort \
     )
     do
         generate_page "$src_page"
