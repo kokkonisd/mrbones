@@ -449,8 +449,12 @@ main() {
 
     info_message "Copying site content..."
     # Make sure to *not* copy templates and the output site directory.
+    # We are also *not* copying HTML files, since we have already treated them before and put them
+    # where they belong (according to the permalinks).
     rsync -a "$WORKING_DIR"/* "$SITE_DIR" \
-        --exclude "$TEMPLATES_DIR_NAME" --exclude "$SITE_DIR_NAME"
+        --exclude "$TEMPLATES_DIR_NAME" --exclude "$SITE_DIR_NAME" \
+        --exclude *.html --exclude *.htm \
+        --prune-empty-dirs
 
     info_message "Generating pages..."
     for src_page in $( \

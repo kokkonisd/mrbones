@@ -32,6 +32,8 @@ run_tests() {
 
             echo -e "  \e[1m\e[91mbaseline\e[39m does not match \e[32mactual output\e[39m:\e[0m"
             echo "$output_diff" 1>&2
+            # Clean up build artifacts.
+            rm -rf "$test_dir/src/_site"
             continue
         fi
 
@@ -69,6 +71,8 @@ run_tests() {
         # We're done with the curl tests, so we should terminate the server.
         kill "$server_pid"
         wait "$server_pid"
+        # Clean up build artifacts.
+        rm -rf "$test_dir/src/_site"
 
         if [[ $curl_tests_passed == 0 ]]
         then
@@ -78,8 +82,6 @@ run_tests() {
         echo -e "\e[1m\e[32mPASS\e[0m" 1>&2
         tests_passed=$((tests_passed + 1))
 
-        # Clean up build artifacts.
-        rm -rf "$test_dir/src/_site"
     done
 
     echo -e "\n┏━━━━━━━━━━━━━━━━━━┓" \
