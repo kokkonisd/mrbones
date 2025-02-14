@@ -14,8 +14,10 @@ run_tests() {
     tests_passed=0
     tests_failed=0
 
-    for test_dir in $(ls -d "$TESTS_DIR"/*)
+    for test_dir in $(ls -d "$TESTS_DIR"/*/)
     do
+        # Strip terminating '/' from the path.
+        test_dir="${test_dir::-1}"
         echo -en "\e[1mRunning\e[0m \e[38;5;244m$test_dir\e[0m \e[1m...\e[0m " 1>&2
 
         baseline=$(cat "$test_dir/baseline.err" 2>/dev/null || echo "")
