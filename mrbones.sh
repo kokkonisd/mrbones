@@ -154,7 +154,7 @@ handle_use_directive() {
 
     page_content="$1"
     src_page_path="$2"
-    verbose_message "    Handling \`@use\`s for $src_page_path..."
+    verbose_message "    Handling \`@use\`s for '$src_page_path'..."
 
     # If there are multiple `@use`s, only the last one will be taken into account.
     use_template="$( \
@@ -224,7 +224,7 @@ handle_include_directive() {
 
     page_content="$1"
     src_page_path="$2"
-    verbose_message "    Handling \`@include\`s for $src_page_path..."
+    verbose_message "    Handling \`@include\`s for '$src_page_path'..."
 
     for include in $(echo "$page_content" | sed -nE 's/@include (.+)/\1/p')
     do
