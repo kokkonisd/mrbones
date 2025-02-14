@@ -32,7 +32,6 @@ run_tests() {
 
             echo -e "  \e[1m\e[91mbaseline\e[39m does not match \e[32mactual output\e[39m:\e[0m"
             echo "$output_diff" 1>&2
-            echo "" 1>&2
             continue
         fi
 
@@ -45,7 +44,7 @@ run_tests() {
         # Wait for the server to start up.
         sleep 0.5
         # Now, run the requests with curl and check against the baseline.
-        for curl_baseline in $(ls "$test_dir"/*.curl)
+        for curl_baseline in $(ls "$test_dir"/*.curl 2>/dev/null)
         do
             request_baseline="$(cat $curl_baseline)"
             request_url="$(basename $curl_baseline | sed -E -e 's/\.curl//g' -e 's/__/\//g' )"
@@ -63,7 +62,6 @@ run_tests() {
                 echo -e "  \e[1m/$request_url: \e[91mrequest baseline\e[39m does not match" \
                     "\e[32mactual output\e[39m:\e[0m"
                 echo "$request_diff" 1>&2
-                echo "" 1>&2
                 curl_tests_passed=0
                 break
             fi
@@ -79,13 +77,12 @@ run_tests() {
 
         echo -e "\e[1m\e[32mPASS\e[0m" 1>&2
         tests_passed=$((tests_passed + 1))
-        echo "" 1>&2
 
         # Clean up build artifacts.
         rm -rf "$test_dir/src/_site"
     done
 
-    echo -e "┏━━━━━━━━━━━━━━━━━━┓" \
+    echo -e "\n┏━━━━━━━━━━━━━━━━━━┓" \
             "\n┃     \e[1mSUMMARY\e[0m      ┃" \
             "\n┣━━━━━━━┯━━━━━━━━━━┫" \
             "\n┃ \e[1m\e[32mPASS\e[0m  │ \e[1m\e[32m$(printf '%-8d' $tests_passed)\e[0m ┃" \

@@ -347,9 +347,9 @@ generate_page() {
     # by default. By creating a copy of the same page in `/stuff/things/index.html`, we enable that
     # last URL to work as intended.
     #
-    # This procedure shall be done on all pages except the root '/' (as there already is an
-    # `index.html` there).
-    if [[ $rel_dest_page_path != "index.html" ]]
+    # This procedure shall be done on all pages except the ones titled 'index.html', since those
+    # have a special meaning anyway (and creating an `index/` subdirectory would be redundant).
+    if [[ $(basename $rel_dest_page_path) != "index.html" ]]
     then
         page_name="$(basename $dest_page_path)"
         dest_copy_path="$dest_page_dir/${page_name%.*}/index.html"
