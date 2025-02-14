@@ -7,6 +7,7 @@
 
 
 VERSION="0.1.0-dev"
+DEPENDENCIES=(sed realpath find)
 set -e
 
 TEMPLATES_DIR_NAME="_templates"
@@ -423,8 +424,21 @@ parse_arguments() {
 }
 
 
+# Check that the necessary dependencies exist.
+check_dependencies() {
+    for dependency in "${DEPENDENCIES[@]}"
+    do
+        if [[ ! $(command -v $dependency) ]]
+        then
+            error "missing dependency: $dependency."
+        fi
+    done
+}
+
+
 # Run `mrbones`.
 main() {
+    check_dependencies
     parse_arguments "$@"
 
     info_message "Setting up output directory '$SITE_DIR'..."

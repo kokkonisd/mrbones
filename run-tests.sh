@@ -2,6 +2,7 @@
 
 
 TMP_DIR=/tmp
+DEPENDENCIES=(sed realpath curl)
 
 MRBONES="$(realpath .)/mrbones.sh"
 TESTS_DIR="$(realpath .)/tests"
@@ -77,6 +78,19 @@ run_baseline_tests() {
     fi
 }
 
+
+# Check that the necessary dependencies exist.
+check_dependencies() {
+    for dependency in "${DEPENDENCIES[@]}"
+    do
+        if [[ ! $(command -v $dependency) ]]
+        then
+            error "missing dependency: $dependency."
+        fi
+    done
+}
+
+check_dependencies
 run_baseline_tests
 
 if [[ $HAD_FAILURES == 1 ]]
