@@ -8,6 +8,7 @@ Currently, `mrbones` is only supported on Linux systems. It has the following de
 - realpath (from [GNU coreutils](https://www.gnu.org/software/coreutils/))
 - find (from [GNU findutils](https://www.gnu.org/software/findutils/))
 - [GNU Make](https://www.gnu.org/software/make/) (optionally, if you wish to use the Makefile)
+- [pre-commit](https://pre-commit.com/) (optionally, if you wish to run local tests or develop)
 
 You can use the [Makefile](./Makefile) to install/uninstall `mrbones`:
 ```console
@@ -45,6 +46,9 @@ may be used by other pages. These enable the following _directives_:
   used in the use directive must contain **at least one** `@content` directive, to indicate where
   the page's content should be placed. Multiple `@content` directives will lead to the page's
   content being placed in multiple parts of the template.
+
+## Contributing
+See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## License
 `mrbones` by Dimitri Kokkonis is licensed under a [Creative Commons Attribution-ShareAlike 4.0
