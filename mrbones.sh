@@ -183,8 +183,18 @@ handle_use_directive() {
     use_template_content="$( \
         handle_include_directive "$use_template_content" "$use_template_path" \
     )"
+    # Propagate error(s).
+    if [[ $? != 0 ]]
+    then
+        exit 1
+    fi
     # Handle `@use`s recursively.
     use_template_content="$(handle_use_directive "$use_template_content" "$use_template_path")"
+    # Propagate error(s).
+    if [[ $? != 0 ]]
+    then
+        exit 1
+    fi
 
     # Replace "@content" by the current page content in the template. This becomes the content of
     # the final page.
@@ -238,8 +248,18 @@ handle_include_directive() {
         include_body="$(cat "$include_path")"
         # We need to handle includes recursively.
         include_body=$(handle_include_directive "$include_body" "$include_path")
+        # Propagate error(s).
+        if [[ $? != 0 ]]
+        then
+            exit 1
+        fi
         # If needed, handle `@use`s here.
         include_body=$(handle_use_directive "$include_body" "$include_path")
+        # Propagate error(s).
+        if [[ $? != 0 ]]
+        then
+            exit 1
+        fi
         # Replace the `"@include (.+)"` string by the file in the captured group.
         include_body="$(escape_sensitive_characters "$include_body")"
         include="$(escape_sensitive_characters "$include")"
