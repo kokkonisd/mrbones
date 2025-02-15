@@ -2,7 +2,7 @@
 
 
 TMP_DIR=/tmp
-DEPENDENCIES=(sed realpath curl python3)
+DEPENDENCIES=(sed realpath find sort curl python3)
 TEST_SERVER_PORT=4444
 TEST_SERVER_WAIT_TIME_SECONDS=0.5
 
@@ -43,7 +43,7 @@ run_tests() {
         baseline_ls="$(cat "$test_dir/baseline.dir" 2>/dev/null || echo "")"
         # Replace $TEST_DIR with the actual test directory in baselines.
         baseline_ls=$(echo "$baseline_ls" | sed -E "s/\\\$TEST_DIR/$test_dir_escaped_slashes/g")
-        actual_ls="$(find "$test_dir/src/_site" | sort)"
+        actual_ls="$(echo "$(find "$test_dir/src/_site" 2>/dev/null || echo "")" | sort)"
         ls_diff="$(diff --color=always <(echo "$baseline_ls") <(echo "$actual_ls"))"
         if [[ "$ls_diff" != "" ]]
         then

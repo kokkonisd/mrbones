@@ -3,7 +3,8 @@ This is the testsuite that `mrbones` is tested against during CI checks and deve
 
 ## Dependencies
 - [GNU sed](https://www.gnu.org/software/sed/)
-- realpath (from [GNU coreutils](https://www.gnu.org/software/coreutils/))
+- realpath, sort (from [GNU coreutils](https://www.gnu.org/software/coreutils/))
+- find (from [GNU findutils](https://www.gnu.org/software/findutils/))
 - [curl](https://curl.se/)
 - [Python 3](https://www.python.org/) (for the test HTTP server)
 

@@ -229,7 +229,7 @@ handle_include_directive() {
     do
         include_path="$TEMPLATES_DIR/$include"
         # Check if include exists.
-        if [[ ! -f $include_path ]]
+        if [[ (! -f $include_path) || "$include_path" == "$TEMPLATES_DIR/" ]]
         then
             error "$src_page_path: file '$include_path' does not exist (missing \`@include\`" \
                 "target.)"
@@ -245,6 +245,13 @@ handle_include_directive() {
         include="$(escape_sensitive_characters "$include")"
         page_content="$(echo "$page_content" | sed -E "s/@include $include/$include_body/g")"
     done
+
+    # At this point, no `@include`s should remain in the file.
+    # If that is not the case, it's because they're empty.
+    if [[ $(echo "$page_content" | sed -nE 's/(^@include|[\s]*[^\\]@include)/\1/p') != "" ]]
+    then
+        error "$src_page_path: empty \`@include\`."
+    fi
 
     echo -e "$page_content"
 }
