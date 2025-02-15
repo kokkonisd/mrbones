@@ -64,9 +64,9 @@ should_use_color() {
 error_message() {
     if should_use_color
     then
-        echo -e "\e[1m[mrbones]\e[0m  \e[31mERROR: $@\e[0m" 1>&2
+        echo -e "\e[1m[mrbones]\e[0m  \e[31mERROR: $*\e[0m" 1>&2
     else
-        echo "[mrbones]  ERROR: $@" 1>&2
+        echo "[mrbones]  ERROR: $*" 1>&2
     fi
 }
 
@@ -74,7 +74,7 @@ error_message() {
 # Print an error message to `stderr` and exit with code 1.
 error() {
     error_message "$@"
-    rm -rf $SITE_DIR/
+    rm -rf "${SITE_DIR:?}/"
     exit 1
 }
 
@@ -83,17 +83,15 @@ error() {
 info_message() {
     if should_use_color
     then
-        echo -e "\e[1m[mrbones]\e[0m  \e[32m$@\e[0m" 1>&2
+        echo -e "\e[1m[mrbones]\e[0m  \e[32m$*\e[0m" 1>&2
     else
-        echo "[mrbones]  $@" 1>&2
+        echo "[mrbones]  $*" 1>&2
     fi
 }
 
 
 # Print a verbose message to `stderr`.
 verbose_message() {
-    local message
-
     if [[ $VERBOSE -ne 1 ]]
     then
         return
@@ -101,9 +99,9 @@ verbose_message() {
 
     if should_use_color
     then
-        echo -e "\e[1m[mrbones]\e[0m  \e[38;5;244m$@\e[0m" 1>&2
+        echo -e "\e[1m[mrbones]\e[0m  \e[38;5;244m$*\e[0m" 1>&2
     else
-        echo "[mrbones]  $@" 1>&2
+        echo "[mrbones]  $*" 1>&2
     fi
 }
 
@@ -188,37 +186,33 @@ handle_use_directive() {
 
     # If the current @use target is a path we've already visited, we're about to be stuck
     # in a recursive loop; we need to error out.
-    escaped_use_template_path="$(escape_sensitive_characters $use_template_path)"
+    escaped_use_template_path="$(escape_sensitive_characters "$use_template_path")"
     if [[ $(echo "$visited_use_paths" | sed -nE "s/($escaped_use_template_path)/\1/p") != "" ]]
     then
         error "$src_page_path: recursive \`@use\` chain found" \
             "(via \`@use\` target '$use_template')."
     fi
 
-    use_template_content="$(cat $use_template_path)"
+    use_template_content="$(cat "$use_template_path")"
     # Make sure to handle any `@include`s in the template.
-    use_template_content="$( \
-        handle_include_directive \
-            "$use_template_content" \
-            "$use_template_path" \
-            "$visited_include_paths" \
-            "$visited_use_paths:$use_template_path" \
-    )"
-    # Propagate error(s).
-    if [[ $? != 0 ]]
+    if ! use_template_content="$( \
+            handle_include_directive \
+                "$use_template_content" \
+                "$use_template_path" \
+                "$visited_include_paths" \
+                "$visited_use_paths:$use_template_path" \
+        )"
     then
         exit 1
     fi
     # Handle `@use`s recursively.
-    use_template_content="$( \
-        handle_use_directive \
-            "$use_template_content" \
-            "$use_template_path" \
-            "$visited_include_paths" \
-            "$visited_use_paths:$use_template_path" \
-    )"
-    # Propagate error(s).
-    if [[ $? != 0 ]]
+    if ! use_template_content="$( \
+            handle_use_directive \
+                "$use_template_content" \
+                "$use_template_path" \
+                "$visited_include_paths" \
+                "$visited_use_paths:$use_template_path" \
+        )"
     then
         exit 1
     fi
@@ -255,12 +249,10 @@ handle_use_directive() {
 # - At most one `@include` per line;
 # - `@include` directives can be stacked across templates (like in the example above).
 handle_include_directive() {
-    local page page_content include_body visited_include_paths visited_use_paths
+    local page_content include_body visited_include_paths visited_use_paths
 
     if [[ $# -ne 4 ]]
     then
-        echo "DBG: $#" 1>&2
-        echo "DBG: '$@'" 1>&2
         error \
             "(INTERNAL): incorrect arguments to" \
             "\`handle_include_directive(page_content, src_page_path,"\
@@ -286,7 +278,7 @@ handle_include_directive() {
 
         # If the current @include target is a path we've already visited, we're about to be stuck
         # in a recursive loop; we need to error out.
-        escaped_include_path="$(escape_sensitive_characters $include_path)"
+        escaped_include_path="$(escape_sensitive_characters "$include_path")"
         if [[ $(echo "$visited_include_paths" | sed -nE "s/($escaped_include_path)/\1/p") != "" ]]
         then
             error "$src_page_path: recursive \`@include\` chain found" \
@@ -295,28 +287,24 @@ handle_include_directive() {
 
         include_body="$(cat "$include_path")"
         # We need to handle includes recursively.
-        include_body=$( \
-            handle_include_directive \
-                "$include_body" \
-                "$include_path" \
-                "$visited_include_paths:$include_path" \
-                "$visited_use_paths" \
-        )
-        # Propagate error(s).
-        if [[ $? != 0 ]]
+        if ! include_body="$( \
+                handle_include_directive \
+                    "$include_body" \
+                    "$include_path" \
+                    "$visited_include_paths:$include_path" \
+                    "$visited_use_paths" \
+            )"
         then
             exit 1
         fi
         # If needed, handle `@use`s here.
-        include_body=$( \
-            handle_use_directive \
-                "$include_body" \
-                "$include_path" \
-                "$visited_include_paths:$include_path" \
-                "$visited_use_paths" \
-        )
-        # Propagate error(s).
-        if [[ $? != 0 ]]
+        if ! include_body="$( \
+                handle_use_directive \
+                    "$include_body" \
+                    "$include_path" \
+                    "$visited_include_paths:$include_path" \
+                    "$visited_use_paths" \
+            )"
         then
             exit 1
         fi
@@ -344,10 +332,10 @@ generate_page() {
     fi
 
     src_page_path="$1"
-    rel_src_page_path="$(realpath --relative-to=$WORKING_DIR $src_page_path)"
+    rel_src_page_path="$(realpath --relative-to="$WORKING_DIR" "$src_page_path")"
     dest_page_path="$SITE_DIR/$rel_src_page_path"
     verbose_message "  Generating page '$rel_src_page_path'..."
-    page_content=$(cat $src_page_path)
+    page_content=$(cat "$src_page_path")
 
     verbose_message "    Resolving destination (permalink)..."
     # Handle permalinks.
@@ -362,7 +350,7 @@ generate_page() {
     page_content="$(echo "$page_content" | sed -E '/@permalink .+/d')"
     permalink="$raw_permalink"
     # Make sure the permalink is an absolute path (i.e., starts with slash).
-    if [[ -n $permalink ]] && [[ $(echo $permalink | cut -b1) != "/" ]]
+    if [[ -n $permalink ]] && [[ $(echo "$permalink" | cut -b1) != "/" ]]
     then
         error "$src_page_path: permalink must be an absolute path (starting with '/')."
     fi
@@ -415,23 +403,23 @@ generate_page() {
     # This temporary directory should not be a security issue. Since it is created with `mkdir -p`,
     # it cannot overwrite existing data. At worst, an empty directory will be temporarily created
     # outside $SITE_DIR, and will almost immediately be cleaned up.
-    dest_page_dir="$(dirname $dest_page_path)"
-    mkdir -p $dest_page_dir/
+    dest_page_dir="$(dirname "$dest_page_path")"
+    mkdir -p "$dest_page_dir"/
     # Finally check that the permalink does not escape the $SITE_DIR.
     if [[ -n $permalink ]] && \
         [[ \
             $(realpath -L \
-                $SITE_DIR/$(realpath --relative-to=$SITE_DIR $SITE_DIR/$permalink) \
+                "$SITE_DIR/$(realpath --relative-to="$SITE_DIR" "$SITE_DIR/$permalink")" \
             )/ != $SITE_DIR/* \
         ]]
     then
         # Roll back the temporary directory creation.
-        rm -rf $dest_page_dir/
+        rm -rf "${dest_page_dir:?}"/
         error "$src_page_path: permalink '$raw_permalink' escapes the generated site directory" \
             "'$SITE_DIR'."
     fi
 
-    rel_dest_page_path="$(realpath --relative-to=$SITE_DIR $dest_page_path)"
+    rel_dest_page_path="$(realpath --relative-to="$SITE_DIR" "$dest_page_path")"
     verbose_message "    Putting page in '$SITE_DIR_NAME/$rel_dest_page_path'..."
 
     echo "$page_content" > "$dest_page_path"
@@ -444,14 +432,14 @@ generate_page() {
     #
     # This procedure shall be done on all pages except the ones titled 'index.html', since those
     # have a special meaning anyway (and creating an `index/` subdirectory would be redundant).
-    if [[ $(basename $rel_dest_page_path) != "index.html" ]]
+    if [[ $(basename "$rel_dest_page_path") != "index.html" ]]
     then
-        page_name="$(basename $dest_page_path)"
+        page_name="$(basename "$dest_page_path")"
         dest_copy_path="$dest_page_dir/${page_name%.*}/index.html"
-        dest_copy_dir="$(dirname $dest_copy_path)"
-        mkdir -p $dest_copy_dir/
+        dest_copy_dir="$(dirname "$dest_copy_path")"
+        mkdir -p "$dest_copy_dir"/
 
-        rel_dest_copy_path="$(realpath --relative-to=$SITE_DIR $dest_copy_path)"
+        rel_dest_copy_path="$(realpath --relative-to="$SITE_DIR" "$dest_copy_path")"
         verbose_message "    Creating page copy in '$SITE_DIR_NAME/$rel_dest_copy_path'..."
         echo "$page_content" > "$dest_copy_path"
     fi
@@ -460,7 +448,7 @@ generate_page() {
 
 # Parse arguments to `mrbones`.
 parse_arguments() {
-    while [[ $# > 0 ]]
+    while [[ $# -gt 0 ]]
     do
         case $1 in
             "--color")
@@ -503,12 +491,12 @@ parse_arguments() {
                 echo "mrbones $VERSION"
                 exit 0
                 ;;
-            -* | --*)
+            --* | -*)
                 error "unrecognized option '$1'." \
                     "Try \`mrbones --help\` for more information."
                 ;;
             *)
-                WORKING_DIR="$(realpath $1)"
+                WORKING_DIR="$(realpath "$1")"
                 TEMPLATES_DIR="$WORKING_DIR/$TEMPLATES_DIR_NAME"
                 SITE_DIR="$WORKING_DIR/$SITE_DIR_NAME"
                 # Skip over the argument.
@@ -523,7 +511,7 @@ parse_arguments() {
 check_dependencies() {
     for dependency in "${DEPENDENCIES[@]}"
     do
-        if [[ ! $(command -v $dependency) ]]
+        if [[ ! $(command -v "$dependency") ]]
         then
             error "missing dependency: $dependency."
         fi
@@ -548,12 +536,12 @@ main() {
     # where they belong (according to the permalinks).
     rsync -a "$WORKING_DIR"/* "$SITE_DIR" \
         --exclude "$TEMPLATES_DIR_NAME" --exclude "$SITE_DIR_NAME" \
-        --exclude *.html --exclude *.htm \
+        --exclude "*.html" --exclude "*.htm" \
         --prune-empty-dirs
 
     info_message "Generating pages..."
     for src_page in $( \
-        find $WORKING_DIR -name "*.html" \
+        find "$WORKING_DIR" -name "*.html" \
             -not -path "$SITE_DIR/*" \
             -not -path "$TEMPLATES_DIR/*" \
         | sort \
