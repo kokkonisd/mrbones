@@ -44,7 +44,6 @@ should_use_color() {
             if [[ $NO_COLOR ]]
             then
                 return 1  # False
-            # `-t 1` tests if we're in a TTY.
             elif [[ ($CLICOLOR_FORCE) || ($IS_TTY == 1) ]]
             then
                 return 0  # True
@@ -187,7 +186,7 @@ handle_use_directive() {
     use_template_content="$(cat $use_template_path)"
     # Make sure to handle any `@include`s in the template.
     use_template_content="$( \
-        handle_include_directive "$use_template_content" "$use_template_path" \
+        handle_include_directive "$use_template_content" "$use_template_path" "" \
     )"
     # Propagate error(s).
     if [[ $? != 0 ]]
@@ -228,22 +227,24 @@ handle_use_directive() {
 # - At most one `@include` per line;
 # - `@include` directives can be stacked across templates (like in the example above).
 handle_include_directive() {
-    local page page_content include_body
+    local page page_content include_body visited_include_paths
 
-    if [[ $# -ne 2 ]]
+    if [[ $# -ne 3 ]]
     then
         error \
             "(INTERNAL): incorrect arguments to " \
-            "\`handle_include_directive(page_content, src_page_path)\`."
+            "\`handle_include_directive(page_content, src_page_path, visited_include_paths)\`."
     fi
 
     page_content="$1"
     src_page_path="$2"
+    visited_include_paths="$3"
     verbose_message "    Handling \`@include\`s for '$src_page_path'..."
 
     for include in $(echo "$page_content" | sed -nE 's/(^@include|[\s]*[^\\]@include) (.+)/\2/p')
     do
         include_path="$TEMPLATES_DIR/$include"
+
         # Check if include exists.
         if [[ (! -f $include_path) || "$include_path" == "$TEMPLATES_DIR/" ]]
         then
@@ -251,9 +252,21 @@ handle_include_directive() {
                 "target)."
         fi
 
+        # If the current @include target is a path we've already visited, we're about to be stuck
+        # in a recursive loop; we need to error out.
+        escaped_include_path="$(escape_sensitive_characters $include_path)"
+        if [[ $(echo "$visited_include_paths" | sed -nE "s/($escaped_include_path)/\1/p") != "" ]]
+        then
+            error "$src_page_path: recursive \`@include\` chain found" \
+                "(via \`@include\` target '$include')."
+        fi
+
         include_body="$(cat "$include_path")"
         # We need to handle includes recursively.
-        include_body=$(handle_include_directive "$include_body" "$include_path")
+        include_body=$( \
+            handle_include_directive \
+                "$include_body" "$include_path" "$visited_include_paths:$include_path" \
+        )
         # Propagate error(s).
         if [[ $? != 0 ]]
         then
@@ -331,7 +344,7 @@ generate_page() {
     page_content="$(handle_use_directive "$page_content" "$src_page_path")"
     # Make sure to handle any `@include`s in the final result.
     # We need to do this, as the source page file itself might have some `@include`s.
-    page_content="$(handle_include_directive "$page_content" "$src_page_path")"
+    page_content="$(handle_include_directive "$page_content" "$src_page_path" "")"
 
     # At this point, no `@include`s should remain in the file.
     # If that is not the case, it's because they're empty.
