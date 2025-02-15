@@ -168,6 +168,12 @@ handle_use_directive() {
         return
     fi
 
+    # Check if the `@use` target is empty (whitespace).
+    if [[ -z "${use_template// }" ]]
+    then
+        error "$src_page_path: empty \`@use\`."
+    fi
+
     # Remove any `@use`s from the file.
     page_content="$(echo "$page_content" | sed -E '/(^@use|[\s]*[^\\]@use) .+/d')"
 
