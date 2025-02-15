@@ -1,0 +1,8 @@
+$TEST_DIR/src/_site
+$TEST_DIR/src/_site/baz
+$TEST_DIR/src/_site/baz/boo.txt
+$TEST_DIR/src/_site/foo
+$TEST_DIR/src/_site/foo/bar
+$TEST_DIR/src/_site/foo/bar.html
+$TEST_DIR/src/_site/foo/bar/index.html
+$TEST_DIR/src/_site/index.html

@@ -19,11 +19,10 @@ run_tests() {
         # Strip terminating '/' from the path.
         test_dir="${test_dir::-1}"
         echo -en "\e[1mRunning\e[0m \e[38;5;244m$test_dir\e[0m \e[1m...\e[0m " 1>&2
+        test_dir_escaped_slashes="$(echo "$test_dir" | sed -E 's/\//\\\//g')"
 
         baseline=$(cat "$test_dir/baseline.err" 2>/dev/null || echo "")
-
         # Replace $TEST_DIR with the actual test directory in baselines.
-        test_dir_escaped_slashes="$(echo "$test_dir" | sed -E 's/\//\\\//g')"
         baseline=$(echo "$baseline" | sed -E "s/\\\$TEST_DIR/$test_dir_escaped_slashes/g")
         actual_output="$(bash "$MRBONES" --verbose --color never "$test_dir/src" 2>&1)"
         output_diff="$(diff --color=always <(echo "$baseline") <(echo "$actual_output"))"
@@ -34,6 +33,25 @@ run_tests() {
 
             echo -e "  \e[1m\e[91mbaseline\e[39m does not match \e[32mactual output\e[39m:\e[0m"
             echo "$output_diff" 1>&2
+            # Clean up build artifacts.
+            rm -rf "$test_dir/src/_site"
+            continue
+        fi
+
+        # Run ls test.
+        baseline_ls="$(cat "$test_dir/baseline.dir" 2>/dev/null || echo "")"
+        # Replace $TEST_DIR with the actual test directory in baselines.
+        baseline_ls=$(echo "$baseline_ls" | sed -E "s/\\\$TEST_DIR/$test_dir_escaped_slashes/g")
+        actual_ls="$(find "$test_dir/src/_site" | sort)"
+        ls_diff="$(diff --color=always <(echo "$baseline_ls") <(echo "$actual_ls"))"
+        if [[ "$ls_diff" != "" ]]
+        then
+            echo -e "\e[1m\e[31mFAIL\e[0m" 1>&2
+            tests_failed=$((tests_failed + 1))
+
+            echo -e "  \e[1m\e[91mbaseline site directory structure\e[39m does not match" \
+                "\e[32mactual site directory structure\e[39m:\e[0m"
+            echo "$ls_diff" 1>&2
             # Clean up build artifacts.
             rm -rf "$test_dir/src/_site"
             continue

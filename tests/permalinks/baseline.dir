@@ -1,0 +1,12 @@
+$TEST_DIR/src/_site
+$TEST_DIR/src/_site/boo
+$TEST_DIR/src/_site/boo.html
+$TEST_DIR/src/_site/boo/index.html
+$TEST_DIR/src/_site/thats
+$TEST_DIR/src/_site/thats/not
+$TEST_DIR/src/_site/thats/not/where
+$TEST_DIR/src/_site/thats/not/where/you
+$TEST_DIR/src/_site/thats/not/where/you/usually
+$TEST_DIR/src/_site/thats/not/where/you/usually/put
+$TEST_DIR/src/_site/thats/not/where/you/usually/put/the
+$TEST_DIR/src/_site/thats/not/where/you/usually/put/the/index.html

@@ -12,6 +12,7 @@ Each test is put in its own directory. For example, `./permalinks/` contains a s
 in this case tests the permalink functionality).
 Each test has two types of sub-tests:
 - **Baseline tests**: test the output of `mrbones`
+- **Output directory structure tests**: test the structure (contents) of the generated site
 - **Curl tests**: test the actual generated site
 
 ### Source directory
@@ -31,6 +32,15 @@ directory.
 **Important notes**:
 - The baseline should contain the _verbose_ output; `mrbones` is invoked with `--verbose`.
 - There is no need to worry about colors; `mrbones` is invoked with `--color never`.
+
+### Output directory structure tests
+Output directory structure tests essentially run `find . | sort` and describe the generated files
+in the `_site/` directory. Such a test needs a `baseline.dir` file, which will contain the expected
+output of the file command (essentially, a sorted list of files).
+
+If you need to refer to the test directory in the output, and since it can change depending on the
+context, you can use the special string `"$TEST_DIR"`, which will expand to the actual test
+directory.
 
 ### Curl tests
 Curl tests run simple HTTP `GET` requests against a test server, which is serving the generated

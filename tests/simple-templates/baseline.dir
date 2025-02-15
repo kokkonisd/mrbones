@@ -1,0 +1,13 @@
+$TEST_DIR/src/_site
+$TEST_DIR/src/_site/using-both
+$TEST_DIR/src/_site/using-both.html
+$TEST_DIR/src/_site/using-both/index.html
+$TEST_DIR/src/_site/using-many
+$TEST_DIR/src/_site/using-many.html
+$TEST_DIR/src/_site/using-many/index.html
+$TEST_DIR/src/_site/using-one
+$TEST_DIR/src/_site/using-one.html
+$TEST_DIR/src/_site/using-one/index.html
+$TEST_DIR/src/_site/using-two
+$TEST_DIR/src/_site/using-two.html
+$TEST_DIR/src/_site/using-two/index.html
