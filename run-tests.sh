@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
 
-TMP_DIR=/tmp
 DEPENDENCIES=(sed realpath find sort curl python3)
 TEST_SERVER_PORT=4444
 TEST_SERVER_WAIT_TIME_SECONDS=0.5
@@ -15,8 +14,10 @@ run_tests() {
     tests_passed=0
     tests_failed=0
 
-    for test_dir in $(ls -d "$TESTS_DIR"/*/)
+    for test_dir in "$TESTS_DIR"/*/
     do
+        # If no tests exist, then stop.
+        [[ -e "$test_dir" ]] || break
         # Strip terminating '/' from the path.
         test_dir="${test_dir::-1}"
         echo -en "\e[1mRunning\e[0m \e[38;5;244m$test_dir\e[0m \e[1m...\e[0m " 1>&2
@@ -43,7 +44,7 @@ run_tests() {
         baseline_ls="$(cat "$test_dir/baseline.dir" 2>/dev/null || echo "")"
         # Replace $TEST_DIR with the actual test directory in baselines.
         baseline_ls=$(echo "$baseline_ls" | sed -E "s/\\\$TEST_DIR/$test_dir_escaped_slashes/g")
-        actual_ls="$(echo "$(find "$test_dir/src/_site" 2>/dev/null || echo "")" | sort)"
+        actual_ls="$( (find "$test_dir/src/_site" 2>/dev/null || echo "") | sort)"
         ls_diff="$(diff --color=always <(echo "$baseline_ls") <(echo "$actual_ls"))"
         if [[ "$ls_diff" != "" ]]
         then
@@ -67,10 +68,12 @@ run_tests() {
         # Wait for the server to start up.
         sleep $TEST_SERVER_WAIT_TIME_SECONDS
         # Now, run the requests with curl and check against the baseline.
-        for curl_baseline in $(ls "$test_dir"/*.curl 2>/dev/null)
+        for curl_baseline in "$test_dir"/*.curl
         do
-            request_baseline="$(cat $curl_baseline)"
-            request_url="$(basename $curl_baseline | sed -E -e 's/\.curl//g' -e 's/__/\//g' )"
+            # If no *.curl files exist, then stop.
+            [[ -e "$curl_baseline" ]] || break
+            request_baseline="$(cat "$curl_baseline")"
+            request_url="$(basename "$curl_baseline" | sed -E -e 's/\.curl//g' -e 's/__/\//g' )"
             request_actual_output=$( \
                 curl http://localhost:$TEST_SERVER_PORT/"$request_url" 2>/dev/null \
             )
@@ -115,7 +118,7 @@ run_tests() {
             "\n┃ \e[1mTotal\e[0m │ \e[1m$(printf '%-8d' $((tests_passed + tests_failed)))\e[0m ┃" \
             "\n┗━━━━━━━┷━━━━━━━━━━┛" 1>&2
 
-    if [[ $tests_failed > 0 ]]
+    if [[ $tests_failed -gt 0 ]]
     then
         HAD_FAILURES=1
     fi
@@ -126,7 +129,7 @@ run_tests() {
 check_dependencies() {
     for dependency in "${DEPENDENCIES[@]}"
     do
-        if [[ ! $(command -v $dependency) ]]
+        if [[ ! $(command -v "$dependency") ]]
         then
             echo -e "\e[1m\e[31mCannot run tests. Missing dependency: $dependency.\e[0m" 1>&2
             exit 1
