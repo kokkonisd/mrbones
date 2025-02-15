@@ -4,6 +4,7 @@
 TMP_DIR=/tmp
 DEPENDENCIES=(sed realpath curl python3)
 TEST_SERVER_PORT=4444
+TEST_SERVER_WAIT_TIME_SECONDS=0.5
 
 MRBONES="$(realpath .)/mrbones.sh"
 TESTS_DIR="$(realpath .)/tests"
@@ -64,7 +65,7 @@ run_tests() {
         # Capture its PID so we can stop it later.
         server_pid="$!"
         # Wait for the server to start up.
-        sleep 0.5
+        sleep $TEST_SERVER_WAIT_TIME_SECONDS
         # Now, run the requests with curl and check against the baseline.
         for curl_baseline in $(ls "$test_dir"/*.curl 2>/dev/null)
         do

@@ -158,7 +158,7 @@ handle_use_directive() {
 
     # If there are multiple `@use`s, only the last one will be taken into account.
     use_template="$( \
-        echo "$page_content" | sed -nE 's/@use (.+)/\1/p' | tail -n1 \
+        echo "$page_content" | sed -nE 's/.*@use (.+)/\1/p' | tail -n1 \
     )"
 
     # No `@use`s, so nothing to do.
@@ -214,7 +214,6 @@ handle_use_directive() {
 handle_include_directive() {
     local page page_content include_body
 
-
     if [[ $# -ne 2 ]]
     then
         error \
@@ -226,7 +225,7 @@ handle_include_directive() {
     src_page_path="$2"
     verbose_message "    Handling \`@include\`s for '$src_page_path'..."
 
-    for include in $(echo "$page_content" | sed -nE 's/@include (.+)/\1/p')
+    for include in $(echo "$page_content" | sed -nE 's/.*@include (.+)/\1/p')
     do
         include_path="$TEMPLATES_DIR/$include"
         # Check if include exists.
@@ -239,6 +238,8 @@ handle_include_directive() {
         include_body="$(cat "$include_path")"
         # We need to handle includes recursively.
         include_body=$(handle_include_directive "$include_body" "$include_path")
+        # If needed, handle `@use`s here.
+        include_body=$(handle_use_directive "$include_body" "$include_path")
         # Replace the `"@include (.+)"` string by the file in the captured group.
         include_body="$(escape_sensitive_characters "$include_body")"
         include="$(escape_sensitive_characters "$include")"
