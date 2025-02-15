@@ -112,14 +112,14 @@ verbose_message() {
 # Escape newlines and slashes from a string.
 #
 # This is used to be able to use strings (potentially containing newlines and slashes) in `sed`.
-escape_newlines_and_slashes() {
+escape_sensitive_characters() {
     # Since `sed` works on a per-line basis, we can't directly replace newlines with their escaped
     # counterpart. So, we do it in two steps: first we use `tr` to transform '\n's to '\\'s, and
     # then we use `sed` to finish the job by transforming '\\'s to '\\n's.
     #
     # We also have to escape '/'s (used in closing HTML tags), as `sed` will mistake them to be
     # separators in the regular expression.
-    echo "$(echo "$@" | tr '\n' '\\' | sed 's/\\/\\n/g' | sed 's/\//\\\//g')"
+    echo -n "$(echo -n "$@" | tr '\n' '\\' | sed 's/\\/\\n/g' | sed 's/\//\\\//g')"
 }
 
 
@@ -188,7 +188,7 @@ handle_use_directive() {
 
     # Replace "@content" by the current page content in the template. This becomes the content of
     # the final page.
-    page_content="$(escape_newlines_and_slashes "$page_content")"
+    page_content="$(escape_sensitive_characters "$page_content")"
     page_content="$(echo "$use_template_content" | sed -E "s/@content/$page_content/g")"
 
     echo -e "$page_content"
@@ -240,7 +240,8 @@ handle_include_directive() {
         # We need to handle includes recursively.
         include_body=$(handle_include_directive "$include_body" "$include_path")
         # Replace the `"@include (.+)"` string by the file in the captured group.
-        include_body="$(escape_newlines_and_slashes "$include_body")"
+        include_body="$(escape_sensitive_characters "$include_body")"
+        include="$(escape_sensitive_characters "$include")"
         page_content="$(echo "$page_content" | sed -E "s/@include $include/$include_body/g")"
     done
 
