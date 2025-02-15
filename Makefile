@@ -10,5 +10,8 @@ install:
 uninstall:
 	rm $(DESTDIR)/$(TARGET)
 
-test:
+tests:
 	bash run-tests.sh
+
+
+.PHONY: tests
