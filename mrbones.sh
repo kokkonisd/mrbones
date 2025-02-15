@@ -113,13 +113,13 @@ verbose_message() {
 #
 # This is used to be able to use strings (potentially containing newlines and slashes) in `sed`.
 escape_sensitive_characters() {
-    # Since `sed` works on a per-line basis, we can't directly replace newlines with their escaped
-    # counterpart. So, we do it in two steps: first we use `tr` to transform '\n's to '\\'s, and
-    # then we use `sed` to finish the job by transforming '\\'s to '\\n's.
-    #
-    # We also have to escape '/'s (used in closing HTML tags), as `sed` will mistake them to be
-    # separators in the regular expression.
-    echo -n "$(echo -n "$@" | tr '\n' '\\' | sed 's/\\/\\n/g' | sed 's/\//\\\//g')"
+    # Escape newlines.
+    result=$(echo -n "${@//$'\n'/\\n}")
+    # Escape backslashes ('\').
+    result=$(echo -n "${result//\\/\\\\}")
+    # Escape (forward) slashes ('/').
+    result=$(echo -n "${result//\//\\\/}")
+    echo -n "$result"
 }
 
 
@@ -158,7 +158,7 @@ handle_use_directive() {
 
     # If there are multiple `@use`s, only the last one will be taken into account.
     use_template="$( \
-        echo "$page_content" | sed -nE 's/.*@use (.+)/\1/p' | tail -n1 \
+        echo "$page_content" | sed -nE 's/(^@use|[\s]*[^\\]@use) (.+)/\2/p' | tail -n1 \
     )"
 
     # No `@use`s, so nothing to do.
@@ -169,7 +169,7 @@ handle_use_directive() {
     fi
 
     # Remove any `@use`s from the file.
-    page_content="$(echo "$page_content" | sed -E '/@use .+/d')"
+    page_content="$(echo "$page_content" | sed -E '/(^@use|[\s]*[^\\]@use) .+/d')"
 
     use_template_path="$TEMPLATES_DIR/$use_template"
     # Load the template.
@@ -225,7 +225,7 @@ handle_include_directive() {
     src_page_path="$2"
     verbose_message "    Handling \`@include\`s for '$src_page_path'..."
 
-    for include in $(echo "$page_content" | sed -nE 's/.*@include (.+)/\1/p')
+    for include in $(echo "$page_content" | sed -nE 's/(^@include|[\s]*[^\\]@include) (.+)/\2/p')
     do
         include_path="$TEMPLATES_DIR/$include"
         # Check if include exists.

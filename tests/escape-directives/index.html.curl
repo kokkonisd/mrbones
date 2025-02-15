@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+    <head>
+    <title>mrbones example</title>
+</head>
+    <body>
+        <main>
+            <h1>mrbones example</h1>
+<p>
+    here is an example of some <pre>mrbones</pre> code:
+    <code>
+        \@include test.html
+        \@use main.html
+        hello
+    </code>
+</p>
+        </main>
+    </body>
+</html>
