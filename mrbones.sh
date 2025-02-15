@@ -226,6 +226,12 @@ handle_use_directive() {
     # Replace "@content" by the current page content in the template. This becomes the content of
     # the final page.
     page_content="$(escape_sensitive_characters "$page_content")"
+    # At least one occurrence of "@content" must exist.
+    if [[ "$(echo "$use_template_content" | sed -nE 's/(@content)/\1/p')" == "" ]]
+    then
+        error "$src_page_path: missing \`@content\` in \`@use\` template '$use_template_path'." \
+            "Maybe you meant to \`@include\` instead?"
+    fi
     page_content="$(echo "$use_template_content" | sed -E "s/@content/$page_content/g")"
 
     echo -e "$page_content"
