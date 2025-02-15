@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="John Doe">
+<link rel="stylesheet" href="/css/main.css">
+        <title>page | site</title>
+    </head>
+    <body>
+        <article>
+    <h1>hello, world</h1>
+<p>This is my first post.</p>
+</article>
+    </body>
+</html>

@@ -1,0 +1,8 @@
+$TEST_DIR/src/_site
+$TEST_DIR/src/_site/2025
+$TEST_DIR/src/_site/2025/02
+$TEST_DIR/src/_site/2025/02/15
+$TEST_DIR/src/_site/2025/02/15/hello-world
+$TEST_DIR/src/_site/2025/02/15/hello-world.html
+$TEST_DIR/src/_site/2025/02/15/hello-world/index.html
+$TEST_DIR/src/_site/index.html
