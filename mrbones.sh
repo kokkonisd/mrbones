@@ -266,13 +266,6 @@ handle_include_directive() {
         page_content="$(echo "$page_content" | sed -E "s/@include $include/$include_body/g")"
     done
 
-    # At this point, no `@include`s should remain in the file.
-    # If that is not the case, it's because they're empty.
-    if [[ $(echo "$page_content" | sed -nE 's/(^@include|[\s]*[^\\]@include)/\1/p') != "" ]]
-    then
-        error "$src_page_path: empty \`@include\`."
-    fi
-
     echo -e "$page_content"
 }
 
@@ -333,6 +326,19 @@ generate_page() {
     # Make sure to handle any `@include`s in the final result.
     # We need to do this, as the source page file itself might have some `@include`s.
     page_content="$(handle_include_directive "$page_content" "$src_page_path")"
+
+    # At this point, no `@include`s should remain in the file.
+    # If that is not the case, it's because they're empty.
+    if [[ $(echo "$page_content" | sed -nE 's/(^@include|[\s]*[^\\]@include)/\1/p') != "" ]]
+    then
+        error "$src_page_path: empty \`@include\`."
+    fi
+    # At this point, no `@use`s should remain in the file.
+    # If that is not the case, it's because they're empty.
+    if [[ $(echo "$page_content" | sed -nE 's/(^@use|[\s]*[^\\]@use)/\1/p') != "" ]]
+    then
+        error "$src_page_path: empty \`@use\`."
+    fi
 
     # At this point, we still need to check if the permalink escapes the $SITE_DIR.
     # This is a quite obvious vulnerability: if someone uses `/../something` as a permalink, then
