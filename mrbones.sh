@@ -175,7 +175,7 @@ handle_use_directive() {
     # Load the template.
     if [[ ! -f $use_template_path ]]
     then
-        error "$src_page_path: file '$use_template_path' does not exist (missing \`@use\` target.)"
+        error "$src_page_path: file '$use_template_path' does not exist (missing \`@use\` target)."
     fi
 
     use_template_content="$(cat $use_template_path)"
@@ -232,7 +232,7 @@ handle_include_directive() {
         if [[ (! -f $include_path) || "$include_path" == "$TEMPLATES_DIR/" ]]
         then
             error "$src_page_path: file '$include_path' does not exist (missing \`@include\`" \
-                "target.)"
+                "target)."
         fi
 
         include_body="$(cat "$include_path")"
