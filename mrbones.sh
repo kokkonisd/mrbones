@@ -202,7 +202,7 @@ handle_use_directive() {
             "$use_template_content" \
             "$use_template_path" \
             "$visited_include_paths" \
-            "$visited_use_paths" \
+            "$visited_use_paths:$use_template_path" \
     )"
     # Propagate error(s).
     if [[ $? != 0 ]]
@@ -215,7 +215,7 @@ handle_use_directive() {
             "$use_template_content" \
             "$use_template_path" \
             "$visited_include_paths" \
-            "$visited_use_paths" \
+            "$visited_use_paths:$use_template_path" \
     )"
     # Propagate error(s).
     if [[ $? != 0 ]]
