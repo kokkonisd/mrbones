@@ -144,15 +144,18 @@ escape_sensitive_characters() {
 handle_use_directive() {
     local page_content src_page_path use_template use_template_content
 
-    if [[ $# -ne 2 ]]
+    if [[ $# -ne 4 ]]
     then
         error \
             "(INTERNAL): incorrect arguments to" \
-            "\`handle_use_directive(page_content, src_page_path)\`."
+            "\`handle_use_directive(page_content, src_page_path,"\
+            "visited_include_paths, visited_use_paths)\`."
     fi
 
     page_content="$1"
     src_page_path="$2"
+    visited_include_paths="$3"
+    visited_use_paths="$4"
     verbose_message "    Handling \`@use\`s for '$src_page_path'..."
 
     # If there are multiple `@use`s, only the last one will be taken into account.
@@ -183,10 +186,23 @@ handle_use_directive() {
         error "$src_page_path: file '$use_template_path' does not exist (missing \`@use\` target)."
     fi
 
+    # If the current @use target is a path we've already visited, we're about to be stuck
+    # in a recursive loop; we need to error out.
+    escaped_use_template_path="$(escape_sensitive_characters $use_template_path)"
+    if [[ $(echo "$visited_use_paths" | sed -nE "s/($escaped_use_template_path)/\1/p") != "" ]]
+    then
+        error "$src_page_path: recursive \`@use\` chain found" \
+            "(via \`@use\` target '$use_template')."
+    fi
+
     use_template_content="$(cat $use_template_path)"
     # Make sure to handle any `@include`s in the template.
     use_template_content="$( \
-        handle_include_directive "$use_template_content" "$use_template_path" "" \
+        handle_include_directive \
+            "$use_template_content" \
+            "$use_template_path" \
+            "$visited_include_paths" \
+            "$visited_use_paths" \
     )"
     # Propagate error(s).
     if [[ $? != 0 ]]
@@ -194,7 +210,13 @@ handle_use_directive() {
         exit 1
     fi
     # Handle `@use`s recursively.
-    use_template_content="$(handle_use_directive "$use_template_content" "$use_template_path")"
+    use_template_content="$( \
+        handle_use_directive \
+            "$use_template_content" \
+            "$use_template_path" \
+            "$visited_include_paths" \
+            "$visited_use_paths" \
+    )"
     # Propagate error(s).
     if [[ $? != 0 ]]
     then
@@ -227,18 +249,22 @@ handle_use_directive() {
 # - At most one `@include` per line;
 # - `@include` directives can be stacked across templates (like in the example above).
 handle_include_directive() {
-    local page page_content include_body visited_include_paths
+    local page page_content include_body visited_include_paths visited_use_paths
 
-    if [[ $# -ne 3 ]]
+    if [[ $# -ne 4 ]]
     then
+        echo "DBG: $#" 1>&2
+        echo "DBG: '$@'" 1>&2
         error \
-            "(INTERNAL): incorrect arguments to " \
-            "\`handle_include_directive(page_content, src_page_path, visited_include_paths)\`."
+            "(INTERNAL): incorrect arguments to" \
+            "\`handle_include_directive(page_content, src_page_path,"\
+            "visited_include_paths, visited_use_paths)\`."
     fi
 
     page_content="$1"
     src_page_path="$2"
     visited_include_paths="$3"
+    visited_use_paths="$4"
     verbose_message "    Handling \`@include\`s for '$src_page_path'..."
 
     for include in $(echo "$page_content" | sed -nE 's/(^@include|[\s]*[^\\]@include) (.+)/\2/p')
@@ -265,7 +291,10 @@ handle_include_directive() {
         # We need to handle includes recursively.
         include_body=$( \
             handle_include_directive \
-                "$include_body" "$include_path" "$visited_include_paths:$include_path" \
+                "$include_body" \
+                "$include_path" \
+                "$visited_include_paths:$include_path" \
+                "$visited_use_paths" \
         )
         # Propagate error(s).
         if [[ $? != 0 ]]
@@ -273,7 +302,13 @@ handle_include_directive() {
             exit 1
         fi
         # If needed, handle `@use`s here.
-        include_body=$(handle_use_directive "$include_body" "$include_path")
+        include_body=$( \
+            handle_use_directive \
+                "$include_body" \
+                "$include_path" \
+                "$visited_include_paths:$include_path" \
+                "$visited_use_paths" \
+        )
         # Propagate error(s).
         if [[ $? != 0 ]]
         then
@@ -341,10 +376,10 @@ generate_page() {
         fi)"
 
     # Handle any `@use`s in the page.
-    page_content="$(handle_use_directive "$page_content" "$src_page_path")"
+    page_content="$(handle_use_directive "$page_content" "$src_page_path" "" "")"
     # Make sure to handle any `@include`s in the final result.
     # We need to do this, as the source page file itself might have some `@include`s.
-    page_content="$(handle_include_directive "$page_content" "$src_page_path" "")"
+    page_content="$(handle_include_directive "$page_content" "$src_page_path" "" "")"
 
     # At this point, no `@include`s should remain in the file.
     # If that is not the case, it's because they're empty.
