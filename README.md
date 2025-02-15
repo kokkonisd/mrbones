@@ -7,6 +7,7 @@ Currently, `mrbones` is only supported on Linux systems. It has the following de
 - [GNU sed](https://www.gnu.org/software/sed/)
 - realpath (from [GNU coreutils](https://www.gnu.org/software/coreutils/))
 - find (from [GNU findutils](https://www.gnu.org/software/findutils/))
+- [GNU Make](https://www.gnu.org/software/make/) (optionally, if you wish to use the Makefile)
 
 You can use the [Makefile](./Makefile) to install/uninstall `mrbones`:
 ```console
