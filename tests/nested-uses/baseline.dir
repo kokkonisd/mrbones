@@ -1,0 +1,5 @@
+$TEST_DIR/src/_site
+$TEST_DIR/src/_site/index.html
+$TEST_DIR/src/_site/second
+$TEST_DIR/src/_site/second.html
+$TEST_DIR/src/_site/second/index.html
