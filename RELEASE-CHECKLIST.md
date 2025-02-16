@@ -23,3 +23,12 @@
 9. Push the tag with `git push --tags`.
 10. Prepare for the next version by bumping the PATCH number and appending `"-dev"` in the version
     (`VERSION`) field in `mrbones.sh`. This means that `"1.2.3"` should become `"1.2.4-dev"`.
+11. Create the release tarball with the following commands (assume release version is `X.Y.Z`):
+    ```console
+    $ git checkout X.Y.Z
+    $ mkdir -p /tmp/mrbones_X-Y-Z/
+    $ sudo make install DESTDIR=/tmp/mrbones_X-Y-Z/
+    $ tar -czf mrbones_X-Y-Z.tar.xz /tmp/mrbones_X-Y-Z/mrbones
+    ```
+    Publish the release using the contents of `CHANGELOG.md` on GitHub and attach the release
+    tarball.
