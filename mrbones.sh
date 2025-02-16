@@ -6,7 +6,7 @@
 ## International License. See the accompanying LICENSE file for more info.
 
 
-VERSION="0.1.0"
+VERSION="0.1.1-dev"
 # Do not edit this field. It is automatically populated during installation.
 BUILD="unknown"
 DEPENDENCIES=(sed realpath find)
