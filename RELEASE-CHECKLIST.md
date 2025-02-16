@@ -11,10 +11,10 @@
    All tests should pass.
 4. Update the `VERSION` field in `mrbones.sh`.
 5. Update `CHANGELOG.md`.
-6. Install `mrbones` via `make install` (if you wish to not overwrite a locally installed
+6. Install `mrbones` via `sudo make install` (if you wish to not overwrite a locally installed
    `mrbones`, set `DESTDIR` to some temporary test directory). Make sure it succeeded by running
    `which mrbones` (or checking the temporary directory where you installed it). Run
-   `mrbones --version` and ensure that the expected version is printed. Uninstall it via `make
+   `mrbones --version` and ensure that the expected version is printed. Uninstall it via `sudo make
    uninstall` and make sure the operation succeeds.
 7. Commit the changes and tag the commit with the version. For example, for version `X.Y.Z`, tag
    the commit with `git tag -a X.Y.Z`.
