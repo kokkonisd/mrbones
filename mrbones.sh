@@ -7,6 +7,8 @@
 
 
 VERSION="0.1.0-dev"
+# Do not edit this field. It is automatically populated during installation.
+BUILD="unknown"
 DEPENDENCIES=(sed realpath find)
 set -e
 
@@ -488,7 +490,7 @@ parse_arguments() {
                 shift
                 ;;
             "-V" | "--version")
-                echo "mrbones $VERSION"
+                echo "mrbones $VERSION (build $BUILD)"
                 exit 0
                 ;;
             --* | -*)
