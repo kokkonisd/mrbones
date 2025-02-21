@@ -112,12 +112,17 @@ verbose_message() {
 #
 # This is used to be able to use strings (potentially containing newlines and slashes) in `sed`.
 escape_sensitive_characters() {
-    # Escape newlines.
-    result=$(echo -n "${@//$'\n'/\\n}")
+    local result="$*"
+
     # Escape backslashes ('\').
     result=$(echo -n "${result//\\/\\\\}")
     # Escape (forward) slashes ('/').
     result=$(echo -n "${result//\//\\\/}")
+    # Escape ampersands ('&').
+    result=$(echo -n "${result//&/\\&}")
+    # Escape newlines.
+    result=$(echo -n "${result//$'\n'/\\n}")
+
     echo -n "$result"
 }
 
