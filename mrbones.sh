@@ -185,6 +185,7 @@ handle_use_directive() {
     page_content="$(echo "$page_content" | sed -E '/(^@use|[\s]*[^\\]@use) .+/d')"
 
     use_template_path="$TEMPLATES_DIR/$use_template"
+
     # Load the template.
     if [[ ! -f $use_template_path ]]
     then
@@ -224,18 +225,19 @@ handle_use_directive() {
         exit 1
     fi
 
-    # Replace "@content" by the current page content in the template. This becomes the content of
-    # the final page.
-    page_content="$(escape_sensitive_characters "$page_content")"
     # At least one occurrence of "@content" must exist.
     if [[ "$(echo "$use_template_content" | sed -nE 's/(@content)/\1/p')" == "" ]]
     then
         error "$src_page_path: missing \`@content\` in \`@use\` template '$use_template_path'." \
             "Maybe you meant to \`@include\` instead?"
     fi
-    page_content="$(echo "$use_template_content" | sed -E "s/@content/$page_content/g")"
 
-    echo -e "$page_content"
+    # Replace "@content" by the current page content in the template. This becomes the content of
+    # the final page.
+    escaped_page_content="$(escape_sensitive_characters "$page_content")"
+    page_content="$(echo "$use_template_content" | sed -E "s/@content/$escaped_page_content/g")"
+
+    echo "$page_content"
 }
 
 
@@ -315,13 +317,14 @@ handle_include_directive() {
         then
             exit 1
         fi
+
         # Replace the `"@include (.+)"` string by the file in the captured group.
         include_body="$(escape_sensitive_characters "$include_body")"
         include="$(escape_sensitive_characters "$include")"
         page_content="$(echo "$page_content" | sed -E "s/@include $include/$include_body/g")"
     done
 
-    echo -e "$page_content"
+    echo "$page_content"
 }
 
 
