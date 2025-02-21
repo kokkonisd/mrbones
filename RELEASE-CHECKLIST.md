@@ -18,8 +18,8 @@
    uninstall` and make sure the operation succeeds.
 7. Commit the changes and tag the commit with the version. For example, for version `X.Y.Z`, tag
    the commit with `git tag -a X.Y.Z`.
-8. Push the commit **without pushing the tags**. Wait for the CI to finish, and continue to the
-   next steps only if the CI succeeds.
+8. Push the commit **without pushing the tags** via `git push --no-follow-tags`. Wait for the CI to
+   finish, and continue to the next steps only if the CI succeeds.
 9. Push the tag with `git push --tags`.
 10. Prepare for the next version by bumping the PATCH number and appending `"-dev"` in the version
     (`VERSION`) field in `mrbones.sh`. This means that `"1.2.3"` should become `"1.2.4-dev"`.
