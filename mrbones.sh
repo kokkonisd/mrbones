@@ -108,71 +108,88 @@ verbose_message() {
 }
 
 
-# Escape newlines and slashes from a string.
-#
-# This is used to be able to use strings (potentially containing newlines and slashes) in `sed`.
-escape_sensitive_characters() {
-    local result="$*"
-
-    # Escape backslashes ('\').
-    result=$(echo -n "${result//\\/\\\\}")
-    # Escape (forward) slashes ('/').
-    result=$(echo -n "${result//\//\\\/}")
-    # Escape ampersands ('&').
-    result=$(echo -n "${result//&/\\&}")
-    # Escape newlines.
-    result=$(echo -n "${result//$'\n'/\\n}")
-
-    echo -n "$result"
-}
-
-
-# Handle `@use` directives.
-#
-# `@use` directives are defined in page or template files, and dictate which template file to use
-# as a basis, replacing the `@content` directive in it with the content of the page using the
-# `@use` directive.
-#
-# For example, consider the following pages and templates as well as their content:
-# - `_templates/skeleton.html`: "<html>@content</html>"
-# - `_templates/main.html`: "@use skeleton.html\n<body>@content</body>"
-# - `index.html`: "@use main.html\n<p>Hello!</p>"
-#
-# The generated `_site/index.html` file will have the following content:
-#     "<html><body><p>Hello!</p></body></html>"
-#
-# A few ground rules:
-# - At most one `@use` per line;
-# - Only the last `@use` in a file is taken into account;
-# - At least one `@content` in the template referenced by `@use`;
-# - `@use` directives can be stacked across templates (like in the example above).
-handle_use_directive() {
-    local page_content src_page_path use_template use_template_content
-
+handle_directives() {
     if [[ $# -ne 4 ]]
     then
         error \
             "(INTERNAL): incorrect arguments to" \
-            "\`handle_use_directive(page_content, src_page_path,"\
+            "\`handle_directives(page_content, src_page_path,"\
             "visited_include_paths, visited_use_paths)\`."
     fi
 
-    page_content="$1"
-    src_page_path="$2"
-    visited_include_paths="$3"
-    visited_use_paths="$4"
-    verbose_message "    Handling \`@use\`s for '$src_page_path'..."
+    local page_content="$1"
+    local src_page_path="$2"
+    local visited_include_paths="$3"
+    local visited_use_paths="$4"
 
+    verbose_message "    Handling \`@include\`s for '$src_page_path'..."
+
+    for include in $(echo "$page_content" | sed -nE 's/(^@include|[\s]*[^\\]@include) (.+)/\2/p')
+    do
+        local include_path="$TEMPLATES_DIR/$include"
+
+        # Check if include exists.
+        if [[ (! -f $include_path) || "$include_path" == "$TEMPLATES_DIR/" ]]
+        then
+            error "$src_page_path: file '$include_path' does not exist (missing \`@include\`" \
+                "target)."
+        fi
+
+        # If the current @include target is a path we've already visited, we're about to be stuck
+        # in a recursive loop; we need to error out.
+        if [[ $visited_include_paths == *$include_path* ]]
+        then
+            error "$src_page_path: recursive \`@include\` chain found" \
+                "(via \`@include\` target '$include')."
+        fi
+
+        # We can declare and use on the same line here since we ignore the return value.
+        # shellcheck disable=SC2155
+        local include_body="$(cat "$include_path")"
+        # We need to handle includes recursively.
+        if ! include_body="$( \
+                handle_directives \
+                    "$include_body" \
+                    "$include_path" \
+                    "$visited_include_paths:$include_path" \
+                    "$visited_use_paths" \
+            )"
+        then
+            exit 1
+        fi
+
+        # Replace the `"@include (.+)"` string by the file in the captured group.
+        #
+        # Make sure to escape ampersands, as they have a different meaning (i.e., "replace with
+        # search term", here "@content").
+        local page_content="${page_content//@include $include/${include_body//$'&'/\\\&}}"
+    done
+    # At this point, no `@include`s should remain.
+    if [[ $(echo "$page_content" | sed -nE 's/(^@include|[\s]*[^\\]@include)/\1/p') != "" ]]
+    then
+        error "$src_page_path: empty \`@include\`."
+    fi
+
+    verbose_message "    Handling \`@use\`s for '$src_page_path'..."
     # If there are multiple `@use`s, only the last one will be taken into account.
-    use_template="$( \
+    #
+    # We can declare and use on the same line here since we ignore the return value.
+    # shellcheck disable=SC2155
+    local use_template="$( \
         echo "$page_content" | sed -nE 's/(^@use|[\s]*[^\\]@use) (.+)/\2/p' | tail -n1 \
     )"
 
-    # No `@use`s, so nothing to do.
     if [[ -z $use_template ]]
     then
-        echo "$page_content"
-        return
+        # If the template name is empty but there are `@use`s, then it's an error.
+        if [[ $(echo "$page_content" | sed -nE 's/(^@use|[\s]*[^\\]@use)/\1/p') != "" ]]
+        then
+            error "$src_page_path: empty \`@use\`."
+        else
+            # No `@use`s, so nothing to do.
+            echo "$page_content"
+            return
+        fi
     fi
 
     # Check if the `@use` target is empty (whitespace).
@@ -184,8 +201,7 @@ handle_use_directive() {
     # Remove any `@use`s from the file.
     page_content="$(echo "$page_content" | sed -E '/(^@use|[\s]*[^\\]@use) .+/d')"
 
-    use_template_path="$TEMPLATES_DIR/$use_template"
-
+    local use_template_path="$TEMPLATES_DIR/$use_template"
     # Load the template.
     if [[ ! -f $use_template_path ]]
     then
@@ -194,28 +210,18 @@ handle_use_directive() {
 
     # If the current @use target is a path we've already visited, we're about to be stuck
     # in a recursive loop; we need to error out.
-    escaped_use_template_path="$(escape_sensitive_characters "$use_template_path")"
-    if [[ $(echo "$visited_use_paths" | sed -nE "s/($escaped_use_template_path)/\1/p") != "" ]]
+    if [[ $visited_use_paths == *$use_template_path* ]]
     then
         error "$src_page_path: recursive \`@use\` chain found" \
             "(via \`@use\` target '$use_template')."
     fi
 
-    use_template_content="$(cat "$use_template_path")"
+    # We can declare and use on the same line here since we ignore the return value.
+    # shellcheck disable=SC2155
+    local use_template_content="$(cat "$use_template_path")"
     # Make sure to handle any `@include`s in the template.
     if ! use_template_content="$( \
-            handle_include_directive \
-                "$use_template_content" \
-                "$use_template_path" \
-                "$visited_include_paths" \
-                "$visited_use_paths:$use_template_path" \
-        )"
-    then
-        exit 1
-    fi
-    # Handle `@use`s recursively.
-    if ! use_template_content="$( \
-            handle_use_directive \
+            handle_directives \
                 "$use_template_content" \
                 "$use_template_path" \
                 "$visited_include_paths" \
@@ -234,95 +240,10 @@ handle_use_directive() {
 
     # Replace "@content" by the current page content in the template. This becomes the content of
     # the final page.
-    escaped_page_content="$(escape_sensitive_characters "$page_content")"
-    page_content="$(echo "$use_template_content" | sed -E "s/@content/$escaped_page_content/g")"
-
-    echo "$page_content"
-}
-
-
-# Handle `@include` directives.
-#
-# `@include` directives are defined in page or template files, and lead to a verbatim copy of the
-# content of the referenced template to be put in the page or template issuing the `@include`.
-#
-# For example, consider the following pages and templates as well as their content:
-# - `_templates/one.html`: "<p>One</p>"
-# - `_templates/two.html`: "@include one.html\n<p>Two</p>"
-# - `index.html`: "@include two.html\n<p>Three</p>"
-#
-# The generated `_site/index.html` file will have the following content:
-#     "<p>One</p>\n<p>Two</p>\n<p>Three<\p>"
-#
-# A few ground rules:
-# - At most one `@include` per line;
-# - `@include` directives can be stacked across templates (like in the example above).
-handle_include_directive() {
-    local page_content include_body visited_include_paths visited_use_paths
-
-    if [[ $# -ne 4 ]]
-    then
-        error \
-            "(INTERNAL): incorrect arguments to" \
-            "\`handle_include_directive(page_content, src_page_path,"\
-            "visited_include_paths, visited_use_paths)\`."
-    fi
-
-    page_content="$1"
-    src_page_path="$2"
-    visited_include_paths="$3"
-    visited_use_paths="$4"
-    verbose_message "    Handling \`@include\`s for '$src_page_path'..."
-
-    for include in $(echo "$page_content" | sed -nE 's/(^@include|[\s]*[^\\]@include) (.+)/\2/p')
-    do
-        include_path="$TEMPLATES_DIR/$include"
-
-        # Check if include exists.
-        if [[ (! -f $include_path) || "$include_path" == "$TEMPLATES_DIR/" ]]
-        then
-            error "$src_page_path: file '$include_path' does not exist (missing \`@include\`" \
-                "target)."
-        fi
-
-        # If the current @include target is a path we've already visited, we're about to be stuck
-        # in a recursive loop; we need to error out.
-        escaped_include_path="$(escape_sensitive_characters "$include_path")"
-        if [[ $(echo "$visited_include_paths" | sed -nE "s/($escaped_include_path)/\1/p") != "" ]]
-        then
-            error "$src_page_path: recursive \`@include\` chain found" \
-                "(via \`@include\` target '$include')."
-        fi
-
-        include_body="$(cat "$include_path")"
-        # We need to handle includes recursively.
-        if ! include_body="$( \
-                handle_include_directive \
-                    "$include_body" \
-                    "$include_path" \
-                    "$visited_include_paths:$include_path" \
-                    "$visited_use_paths" \
-            )"
-        then
-            exit 1
-        fi
-        # If needed, handle `@use`s here.
-        if ! include_body="$( \
-                handle_use_directive \
-                    "$include_body" \
-                    "$include_path" \
-                    "$visited_include_paths:$include_path" \
-                    "$visited_use_paths" \
-            )"
-        then
-            exit 1
-        fi
-
-        # Replace the `"@include (.+)"` string by the file in the captured group.
-        include_body="$(escape_sensitive_characters "$include_body")"
-        include="$(escape_sensitive_characters "$include")"
-        page_content="$(echo "$page_content" | sed -E "s/@include $include/$include_body/g")"
-    done
+    #
+    # Make sure to escape ampersands, as they have a different meaning (i.e., "replace with
+    # search term", here "@content").
+    page_content="${use_template_content//@content/${page_content//$'&'/\\\&}}"
 
     echo "$page_content"
 }
@@ -333,19 +254,20 @@ handle_include_directive() {
 # All HTML pages (with extension ".html" or ".htm") are taken into account. Directives understood
 # by `mrbones` are expanded.
 generate_page() {
-    local src_page_path rel_src_page_path dest_page_dir dest_page_path rel_dest_page_path \
-        page_content
-
     if [[ $# -ne 1 ]]
     then
         error "(INTERNAL) incorrect arguments to \`generate_page(src_page_path)\`."
     fi
 
-    src_page_path="$1"
-    rel_src_page_path="$(realpath --relative-to="$WORKING_DIR" "$src_page_path")"
-    dest_page_path="$SITE_DIR/$rel_src_page_path"
+    local src_page_path="$1"
+    # We can declare and use on the same line here since we ignore the return value.
+    # shellcheck disable=SC2155
+    local rel_src_page_path="$(realpath --relative-to="$WORKING_DIR" "$src_page_path")"
+    local dest_page_path="$SITE_DIR/$rel_src_page_path"
     verbose_message "  Generating page '$rel_src_page_path'..."
-    page_content=$(cat "$src_page_path")
+    # We can declare and use on the same line here since we ignore the return value.
+    # shellcheck disable=SC2155
+    local page_content=$(cat "$src_page_path")
 
     verbose_message "    Resolving destination (permalink)..."
     # Handle permalinks.
@@ -353,12 +275,15 @@ generate_page() {
     # Permalinks are registered via `@permalink <LINK>`. `<LINK>` needs to be an absolute path with
     # regards to the site root (i.e., needs to start with '/'). If there are multiple permalinks,
     # only the last one will be taken into account.
-    raw_permalink="$( \
+    #
+    # We can declare and use on the same line here since we ignore the return value.
+    # shellcheck disable=SC2155
+    local raw_permalink="$( \
         echo "$page_content" | sed -nE 's/@permalink (.+)/\1/p' | tail -n1 \
     )"
     # Remove any permalink(s) from the file.
     page_content="$(echo "$page_content" | sed -E '/@permalink .+/d')"
-    permalink="$raw_permalink"
+    local permalink="$raw_permalink"
     # Make sure the permalink is an absolute path (i.e., starts with slash).
     if [[ -n $permalink ]] && [[ $(echo "$permalink" | cut -b1) != "/" ]]
     then
@@ -372,31 +297,16 @@ generate_page() {
             echo "$permalink"
         fi)"
 
-    dest_page_path="$(if [[ -n $permalink ]]
+    # We can declare and use on the same line here since we ignore the return value.
+    # shellcheck disable=SC2155
+    local dest_page_path="$(if [[ -n $permalink ]]
         then
             echo "$SITE_DIR/$permalink"
         else
             echo "$dest_page_path"
-        fi)"
+    fi)"
 
-    # Handle any `@use`s in the page.
-    page_content="$(handle_use_directive "$page_content" "$src_page_path" "" "")"
-    # Make sure to handle any `@include`s in the final result.
-    # We need to do this, as the source page file itself might have some `@include`s.
-    page_content="$(handle_include_directive "$page_content" "$src_page_path" "" "")"
-
-    # At this point, no `@include`s should remain in the file.
-    # If that is not the case, it's because they're empty.
-    if [[ $(echo "$page_content" | sed -nE 's/(^@include|[\s]*[^\\]@include)/\1/p') != "" ]]
-    then
-        error "$src_page_path: empty \`@include\`."
-    fi
-    # At this point, no `@use`s should remain in the file.
-    # If that is not the case, it's because they're empty.
-    if [[ $(echo "$page_content" | sed -nE 's/(^@use|[\s]*[^\\]@use)/\1/p') != "" ]]
-    then
-        error "$src_page_path: empty \`@use\`."
-    fi
+    page_content="$(handle_directives "$page_content" "$src_page_path" "" "")"
 
     # At this point, we still need to check if the permalink escapes the $SITE_DIR.
     # This is a quite obvious vulnerability: if someone uses `/../something` as a permalink, then
@@ -413,7 +323,10 @@ generate_page() {
     # This temporary directory should not be a security issue. Since it is created with `mkdir -p`,
     # it cannot overwrite existing data. At worst, an empty directory will be temporarily created
     # outside $SITE_DIR, and will almost immediately be cleaned up.
-    dest_page_dir="$(dirname "$dest_page_path")"
+    #
+    # We can declare and use on the same line here since we ignore the return value.
+    # shellcheck disable=SC2155
+    local dest_page_dir="$(dirname "$dest_page_path")"
     mkdir -p "$dest_page_dir"/
     # Finally check that the permalink does not escape the $SITE_DIR.
     if [[ -n $permalink ]] && \
@@ -429,7 +342,9 @@ generate_page() {
             "'$SITE_DIR'."
     fi
 
-    rel_dest_page_path="$(realpath --relative-to="$SITE_DIR" "$dest_page_path")"
+    # We can declare and use on the same line here since we ignore the return value.
+    # shellcheck disable=SC2155
+    local rel_dest_page_path="$(realpath --relative-to="$SITE_DIR" "$dest_page_path")"
     verbose_message "    Putting page in '$SITE_DIR_NAME/$rel_dest_page_path'..."
 
     echo "$page_content" > "$dest_page_path"
@@ -444,12 +359,18 @@ generate_page() {
     # have a special meaning anyway (and creating an `index/` subdirectory would be redundant).
     if [[ $(basename "$rel_dest_page_path") != "index.html" ]]
     then
-        page_name="$(basename "$dest_page_path")"
-        dest_copy_path="$dest_page_dir/${page_name%.*}/index.html"
-        dest_copy_dir="$(dirname "$dest_copy_path")"
+        # We can declare and use on the same line here since we ignore the return value.
+        # shellcheck disable=SC2155
+        local page_name="$(basename "$dest_page_path")"
+        local dest_copy_path="$dest_page_dir/${page_name%.*}/index.html"
+        # We can declare and use on the same line here since we ignore the return value.
+        # shellcheck disable=SC2155
+        local dest_copy_dir="$(dirname "$dest_copy_path")"
         mkdir -p "$dest_copy_dir"/
 
-        rel_dest_copy_path="$(realpath --relative-to="$SITE_DIR" "$dest_copy_path")"
+        # We can declare and use on the same line here since we ignore the return value.
+        # shellcheck disable=SC2155
+        local rel_dest_copy_path="$(realpath --relative-to="$SITE_DIR" "$dest_copy_path")"
         verbose_message "    Creating page copy in '$SITE_DIR_NAME/$rel_dest_copy_path'..."
         echo "$page_content" > "$dest_copy_path"
     fi
@@ -550,15 +471,24 @@ main() {
         --prune-empty-dirs
 
     info_message "Generating pages..."
-    for src_page in $( \
+
+    src_pages=$( \
         find "$WORKING_DIR" -name "*.html" \
             -not -path "$SITE_DIR/*" \
             -not -path "$TEMPLATES_DIR/*" \
         | sort \
     )
+
+    # _start_g="$(date +%s%3N)"
+    for src_page in $src_pages
     do
+        # _start="$(date +%s%3N)"
         generate_page "$src_page"
+        # _stop="$(date +%s%3N)"
+        # echo "DBG: GENERATE: $((_stop - _start)) ms"
     done
+    # _stop_g="$(date +%s%3N)"
+    # echo "DBG: FULL: $((_stop_g - _start_g)) ms"
 
     info_message "Done! Site is ready at '$SITE_DIR'."
 }
