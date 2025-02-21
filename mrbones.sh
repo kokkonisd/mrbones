@@ -479,16 +479,11 @@ main() {
         | sort \
     )
 
-    # _start_g="$(date +%s%3N)"
     for src_page in $src_pages
     do
-        # _start="$(date +%s%3N)"
         generate_page "$src_page"
-        # _stop="$(date +%s%3N)"
-        # echo "DBG: GENERATE: $((_stop - _start)) ms"
     done
-    # _stop_g="$(date +%s%3N)"
-    # echo "DBG: FULL: $((_stop_g - _start_g)) ms"
+
 
     info_message "Done! Site is ready at '$SITE_DIR'."
 }
