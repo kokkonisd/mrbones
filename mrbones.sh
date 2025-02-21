@@ -241,9 +241,13 @@ handle_directives() {
     # Replace "@content" by the current page content in the template. This becomes the content of
     # the final page.
     #
+    # Note that we have to escape backslashes here, or else they are interpreted as part of the
+    # pattern (and thus '\\' get converted to '\').
+    local escaped_page_content="${page_content//\\/\\\\}"
     # Make sure to escape ampersands, as they have a different meaning (i.e., "replace with
     # search term", here "@content").
-    page_content="${use_template_content//@content/${page_content//$'&'/\\\&}}"
+    escaped_page_content="${escaped_page_content//$'&'/\\\&}"
+    page_content="${use_template_content//@content/$escaped_page_content}"
 
     echo "$page_content"
 }
