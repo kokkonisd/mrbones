@@ -21,6 +21,8 @@ VERBOSE=0
 # - 2: always
 USE_COLOR=1
 WORKING_DIR=$PWD
+USE_CACHE=1
+MRBONES_CACHE="${TMP_DIR:-/tmp}/.mrbones.cache"
 
 TEMPLATES_DIR="$WORKING_DIR/$TEMPLATES_DIR_NAME"
 SITE_DIR="$WORKING_DIR/$SITE_DIR_NAME"
@@ -108,6 +110,68 @@ verbose_message() {
 }
 
 
+# Get the cache of a source page (if it exists) via the page's absolute path.
+#
+# If caching is disabled, this function always results in a cache miss (by returning an empty
+# string).
+get_page_cache() {
+    if [[ $# -ne 1 ]]
+    then
+        error "(INTERNAL): incorrect arguments to \`get_page_cache(src_page_path)\`."
+    fi
+
+    local src_page_path="$1"
+
+    if [[ $USE_CACHE == 0 ]]
+    then
+        echo ""
+        return
+    fi
+
+    # We can declare and use on the same line here since we ignore the return value.
+    # shellcheck disable=SC2155
+    local result="$(sed -nE "s/${src_page_path//\//\\/}=(.+)$/\\1/p" "$MRBONES_CACHE")"
+    # Unescape any escaped characters.
+    #
+    # There is a subtlety here: we might have `\\n`s in the original source that will have become
+    # `\\\\n`s after escaping. If we naively do `\\n` -> `\n`, then `\\\\n` -> `\\\n`, so we need
+    # to take care to convert `\\\n`s back to `\\n`s.
+    result="${result//\\n/$'\n'}"
+    result="${result//\\$'\n'/\\n}"
+    result="${result//\\\\/\\}"
+    result="${result//\\=/=}"
+
+    echo "$result"
+}
+
+
+# Set the cache of a source page.
+#
+# If caching is disabled, this function is a no-op.
+set_page_cache() {
+    if [[ $# -ne 2 ]]
+    then
+        error "(INTERNAL): incorrect arguments to \`set_page_cache(src_page_path, page_content)\`."
+    fi
+
+    local src_page_path="$1"
+    local page_content="$2"
+
+    if [[ $USE_CACHE == 0 ]]
+    then
+        return
+    fi
+
+    local result="$page_content"
+    # Escape some sensitive characters.
+    result="${result//\\/\\\\}"
+    result="${result//$'\n'/\\n}"
+    result="${result//=/\\=}"
+
+    echo "$src_page_path=$result" >> "$MRBONES_CACHE"
+}
+
+
 handle_directives() {
     if [[ $# -ne 4 ]]
     then
@@ -121,6 +185,9 @@ handle_directives() {
     local src_page_path="$2"
     local visited_include_paths="$3"
     local visited_use_paths="$4"
+
+    local cache=""
+
 
     verbose_message "    Handling \`@include\`s for '$src_page_path'..."
 
@@ -143,19 +210,27 @@ handle_directives() {
                 "(via \`@include\` target '$include')."
         fi
 
-        # We can declare and use on the same line here since we ignore the return value.
-        # shellcheck disable=SC2155
-        local include_body="$(cat "$include_path")"
-        # We need to handle includes recursively.
-        if ! include_body="$( \
-                handle_directives \
-                    "$include_body" \
-                    "$include_path" \
-                    "$visited_include_paths:$include_path" \
-                    "$visited_use_paths" \
-            )"
+        cache="$(get_page_cache "$include_path")"
+        if [[ $cache == "" ]]
         then
-            exit 1
+            # We can declare and use on the same line here since we ignore the return value.
+            # shellcheck disable=SC2155
+            local include_body="$(cat "$include_path")"
+            # We need to handle includes recursively.
+            if ! include_body="$( \
+                    handle_directives \
+                        "$include_body" \
+                        "$include_path" \
+                        "$visited_include_paths:$include_path" \
+                        "$visited_use_paths" \
+                )"
+            then
+                exit 1
+            fi
+
+            set_page_cache "$include_path" "$include_body"
+        else
+            include_body="$cache"
         fi
 
         # Replace the `"@include (.+)"` string by the file in the captured group.
@@ -216,26 +291,34 @@ handle_directives() {
             "(via \`@use\` target '$use_template')."
     fi
 
-    # We can declare and use on the same line here since we ignore the return value.
-    # shellcheck disable=SC2155
-    local use_template_content="$(cat "$use_template_path")"
-    # Make sure to handle any `@include`s in the template.
-    if ! use_template_content="$( \
-            handle_directives \
-                "$use_template_content" \
-                "$use_template_path" \
-                "$visited_include_paths" \
-                "$visited_use_paths:$use_template_path" \
-        )"
+    cache="$(get_page_cache "$use_template_path")"
+    if [[ $cache == "" ]]
     then
-        exit 1
-    fi
+        # We can declare and use on the same line here since we ignore the return value.
+        # shellcheck disable=SC2155
+        local use_template_content="$(cat "$use_template_path")"
+        # Make sure to handle any `@include`s in the template.
+        if ! use_template_content="$( \
+                handle_directives \
+                    "$use_template_content" \
+                    "$use_template_path" \
+                    "$visited_include_paths" \
+                    "$visited_use_paths:$use_template_path" \
+            )"
+        then
+            exit 1
+        fi
 
-    # At least one occurrence of "@content" must exist.
-    if [[ "$(echo "$use_template_content" | sed -nE 's/(@content)/\1/p')" == "" ]]
-    then
-        error "$src_page_path: missing \`@content\` in \`@use\` template '$use_template_path'." \
-            "Maybe you meant to \`@include\` instead?"
+        # At least one occurrence of "@content" must exist.
+        if [[ "$(echo "$use_template_content" | sed -nE 's/(@content)/\1/p')" == "" ]]
+        then
+            error "$src_page_path: missing \`@content\` in \`@use\` template" \
+                "'$use_template_path'. Maybe you meant to \`@include\` instead?"
+        fi
+
+        set_page_cache "$use_template_path" "$use_template_content"
+    else
+        use_template_content="$cache"
     fi
 
     # Replace "@content" by the current page content in the template. This becomes the content of
@@ -417,6 +500,11 @@ parse_arguments() {
                     "\n  -V, --version   print this program's version number"
                 exit 0
                 ;;
+            "--no-cache")
+                USE_CACHE=0
+                # Skip over `--no-cache`.
+                shift
+                ;;
             "-v" | "--verbose")
                 VERBOSE=1
                 # Skip over `-v`/`--verbose`.
@@ -464,6 +552,12 @@ main() {
     rm -rf "$SITE_DIR"
     verbose_message "  Creating '$SITE_DIR/'..."
     mkdir -p "$SITE_DIR"
+
+    if [[ $USE_CACHE == 1 ]]
+    then
+        touch "$MRBONES_CACHE"
+        truncate --size=0 "$MRBONES_CACHE"
+    fi
 
     info_message "Copying site content..."
     # Make sure to *not* copy templates and the output site directory.

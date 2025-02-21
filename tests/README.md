@@ -22,9 +22,11 @@ site. Essentially, for each test we will run `mrbones <path to test dir>/src/`.
 
 ### Baseline tests
 Baseline tests are pretty simple, since `mrbones` only prints output in `stderr`.
-A baseline test needs a `baseline.err` file, which will contain the expected output (printed in
-`stderr`) of `mrbones`. This is used to either verify that the page was generated following an
-expected sequence of actions, or that the generation failed expectedly.
+A baseline test needs a `baseline.err` file and a `baseline.err.nocache` file, which will contain
+the expected output (printed in `stderr`) of `mrbones`. The difference between the files is that
+for the first baseline `mrbones` uses page caching, while for the second one it does not. These
+files are used to either verify that the page was generated following an expected sequence of
+actions, or that the generation failed expectedly.
 
 If you need to refer to the test directory in the output, and since it can change depending on the
 context, you can use the special string `"$TEST_DIR"`, which will expand to the actual test
