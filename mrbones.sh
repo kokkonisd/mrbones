@@ -59,7 +59,8 @@ should_use_color() {
             return 0  # True
             ;;
         *)
-            error "(INTERNAL): invalid value '$USE_COLOR' for \$USE_COLOR."
+            echo "(INTERNAL): invalid value '$USE_COLOR' for \$USE_COLOR." 1>&2
+            exit 1
             ;;
     esac
 }
@@ -96,7 +97,7 @@ info_message() {
 
 # Print a verbose message to `stderr`.
 verbose_message() {
-    if [[ $VERBOSE -ne 1 ]]
+    if [[ $VERBOSE == 0 ]]
     then
         return
     fi
@@ -250,7 +251,8 @@ handle_directives() {
     #
     # We can declare and use on the same line here since we ignore the return value.
     # shellcheck disable=SC2155
-    local use_template="$( \
+    local use_template=""
+    use_template="$( \
         echo "$page_content" | sed -nE 's/(^@use|[\s]*[^\\]@use) (.+)/\2/p' | tail -n1 \
     )"
 
@@ -377,23 +379,15 @@ generate_page() {
         error "$src_page_path: permalink must be an absolute path (starting with '/')."
     fi
     # Make sure to normalize the permalink, by ensuring that it ends in ".html"/".htm".
-    permalink="$(if [[ -n $permalink ]] && [[ $permalink != *.htm ]] && [[ $permalink != *.html ]]
-        then
-            echo "$permalink.html"
-        else
-            echo "$permalink"
-        fi)"
+    if [[ -n $permalink ]] && [[ $permalink != *.htm ]] && [[ $permalink != *.html ]]
+    then
+        permalink="$permalink.html"
+    fi
 
-    # We can declare and use on the same line here since we ignore the return value.
-    # shellcheck disable=SC2155
-    local dest_page_path="$(if [[ -n $permalink ]]
-        then
-            echo "$SITE_DIR/$permalink"
-        else
-            echo "$dest_page_path"
-    fi)"
-
-    page_content="$(handle_directives "$page_content" "$src_page_path" "" "")"
+    if [[ -n $permalink ]]
+    then
+        dest_page_path="$SITE_DIR/$permalink"
+    fi
 
     # At this point, we still need to check if the permalink escapes the $SITE_DIR.
     # This is a quite obvious vulnerability: if someone uses `/../something` as a permalink, then
@@ -414,6 +408,13 @@ generate_page() {
     # We can declare and use on the same line here since we ignore the return value.
     # shellcheck disable=SC2155
     local dest_page_dir="$(dirname "$dest_page_path")"
+    # Memorize if `$dest_page_dir` already exists; if yes, in case of a rollback, we don't need to
+    # remove it.
+    local dest_page_dir_exists=0
+    if [[ -e $dest_page_dir ]]
+    then
+        dest_page_dir_exists=1
+    fi
     mkdir -p "$dest_page_dir"/
     # Finally check that the permalink does not escape the $SITE_DIR.
     if [[ -n $permalink ]] && \
@@ -423,11 +424,16 @@ generate_page() {
             )/ != $SITE_DIR/* \
         ]]
     then
-        # Roll back the temporary directory creation.
-        rm -rf "${dest_page_dir:?}"/
+        # Roll back the temporary directory creation (if needed).
+        if [[ $dest_page_dir_exists == 0 ]]
+        then
+            rm -rf "${dest_page_dir:?}"/
+        fi
         error "$src_page_path: permalink '$raw_permalink' escapes the generated site directory" \
             "'$SITE_DIR'."
     fi
+
+    page_content="$(handle_directives "$page_content" "$src_page_path" "" "")"
 
     # We can declare and use on the same line here since we ignore the return value.
     # shellcheck disable=SC2155
@@ -597,4 +603,8 @@ main() {
     info_message "Done! Site is ready at '$SITE_DIR'."
 }
 
-main "$@"
+# If the script is `source`d (as is the case during unit tests), do not run `main()`.
+if ! (return 0 2>/dev/null)
+then
+    main "$@"
+fi

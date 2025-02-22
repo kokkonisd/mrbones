@@ -7,10 +7,11 @@ TEST_SERVER_WAIT_TIME_SECONDS=0.5
 
 MRBONES="$(realpath .)/mrbones.sh"
 TESTS_DIR="$(realpath .)/tests"
+COMMON="$TESTS_DIR/common.sh"
 HAD_FAILURES=0
 
 
-run_tests() {
+run_baseline_tests() {
     local tests_passed=0
     local tests_failed=0
 
@@ -26,6 +27,7 @@ run_tests() {
     do
         # If no tests exist, then stop.
         [[ -e "$test_dir" ]] || break
+
         # Strip terminating '/' from the path.
         test_dir="${test_dir::-1}"
         echo -en "\e[1mRunning\e[0m \e[38;5;244m$test_dir\e[0m \e[1m...\e[0m " 1>&2
@@ -137,7 +139,53 @@ run_tests() {
     done
 
     echo -e "\n┏━━━━━━━━━━━━━━━━━━┓" \
-            "\n┃     \e[1mSUMMARY\e[0m      ┃" \
+            "\n┃ \e[1mBASELINE SUMMARY\e[0m ┃" \
+            "\n┣━━━━━━━┯━━━━━━━━━━┫" \
+            "\n┃ \e[1m\e[32mPASS\e[0m  │ \e[1m\e[32m$(printf '%-8d' $tests_passed)\e[0m ┃" \
+            "\n┠───────┼──────────┨" \
+            "\n┃ \e[1m\e[31mFAIL\e[0m  │ \e[1m\e[31m$(printf '%-8d' $tests_failed)\e[0m ┃" \
+            "\n┠───────┼──────────┨" \
+            "\n┃ \e[1mTotal\e[0m │ \e[1m$(printf '%-8d' $((tests_passed + tests_failed)))\e[0m ┃" \
+            "\n┗━━━━━━━┷━━━━━━━━━━┛" 1>&2
+
+    if [[ $tests_failed -gt 0 ]]
+    then
+        HAD_FAILURES=1
+    fi
+}
+
+
+# Run unit tests.
+#
+# These tests come in the form of Bash files in $TESTS_DIR.
+run_unit_tests() {
+    local tests_passed=0
+    local tests_failed=0
+
+    for unit_test in "$TESTS_DIR"/*.sh
+    do
+        # If no tests exist, then stop.
+        [[ -e "$unit_test" ]] || break
+        # Skip $COMMON (contains utilities shared among unit tests).
+        [[ "$unit_test" == "$COMMON" ]] && continue
+
+        echo -en "\e[1mRunning\e[0m \e[38;5;244m$unit_test\e[0m \e[1m...\e[0m " 1>&2
+
+        local output=""
+        if output="$(MRBONES="$MRBONES" COMMON="$COMMON" bash "$unit_test" 2>&1)"
+        then
+            echo -e "\e[1m\e[32mPASS\e[0m" 1>&2
+            tests_passed=$((tests_passed + 1))
+        else
+            echo -e "\e[1m\e[31mFAIL\e[0m" 1>&2
+            echo -e "  \e[1mtest output:\e[0m"
+            echo "$output" 1>&2
+            tests_failed=$((tests_failed + 1))
+        fi
+    done
+
+    echo -e "\n┏━━━━━━━━━━━━━━━━━━┓" \
+            "\n┃   \e[1mUNIT SUMMARY\e[0m   ┃" \
             "\n┣━━━━━━━┯━━━━━━━━━━┫" \
             "\n┃ \e[1m\e[32mPASS\e[0m  │ \e[1m\e[32m$(printf '%-8d' $tests_passed)\e[0m ┃" \
             "\n┠───────┼──────────┨" \
@@ -166,7 +214,9 @@ check_dependencies() {
 }
 
 check_dependencies
-run_tests
+run_unit_tests
+echo "" 1>&2
+run_baseline_tests
 
 if [[ $HAD_FAILURES == 1 ]]
 then
