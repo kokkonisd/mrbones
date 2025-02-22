@@ -496,6 +496,7 @@ parse_arguments() {
                     "\n                  - auto: sensible defaults apply" \
                     "\n                  - always: color is always used" \
                     "\n  -h, --help      print this help message" \
+                    "\n  --no-cache      disable template page caching" \
                     "\n  -v, --verbose   print more verbose messages" \
                     "\n  -V, --version   print this program's version number"
                 exit 0
