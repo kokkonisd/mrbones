@@ -28,7 +28,7 @@
     $ git checkout X.Y.Z
     $ mkdir -p /tmp/mrbones_X-Y-Z/
     $ make install DESTDIR=/tmp/mrbones_X-Y-Z/
-    $ tar -C /tmp/mrbones_X-Y-Z -cJf mrbones_X-Y-Z.tar.xz mrbones
+    $ tar -C /tmp/mrbones_X-Y-Z -cJf mrbones.tar.xz mrbones
     ```
     Publish the release using the contents of `CHANGELOG.md` on GitHub and attach the release
     tarball.
