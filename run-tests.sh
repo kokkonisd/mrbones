@@ -34,7 +34,7 @@ run_tests() {
         baseline=$(cat "$test_dir/baseline.err.nocache" 2>/dev/null || echo "")
         # Replace $TEST_DIR with the actual test directory in baselines.
         baseline="${baseline//\$TEST_DIR/$test_dir}"
-        actual_output="$(bash "$MRBONES" --no-cache --verbose --color never "$test_dir/src" 2>&1)"
+        actual_output="$(bash "$MRBONES" --no-cache --verbose --color=never "$test_dir/src" 2>&1)"
         output_diff="$(diff --color=always <(echo "$baseline") <(echo "$actual_output"))"
         if [[ "$output_diff" != "" ]]
         then
@@ -52,7 +52,7 @@ run_tests() {
         baseline=$(cat "$test_dir/baseline.err" 2>/dev/null || echo "")
         # Replace $TEST_DIR with the actual test directory in baselines.
         baseline="${baseline//\$TEST_DIR/$test_dir}"
-        actual_output="$(bash "$MRBONES" --verbose --color never "$test_dir/src" 2>&1)"
+        actual_output="$(bash "$MRBONES" --verbose --color=never "$test_dir/src" 2>&1)"
         output_diff="$(diff --color=always <(echo "$baseline") <(echo "$actual_output"))"
         if [[ "$output_diff" != "" ]]
         then
