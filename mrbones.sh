@@ -469,12 +469,18 @@ parse_arguments() {
     while [[ $# -gt 0 ]]
     do
         case $1 in
-            "--color" | --color=*)
+            --color=*)
                 # In case the user passed `--color=WHEN`, split on the `=`.
-                local args
-                IFS='=' read -ra args <<< "$1"
-
-                case "${args[1]}" in
+                local color_args=""
+                IFS='=' read -ra color_args <<< "$1"
+                # Skip the `--color=WHEN` argument now that we've parsed it.
+                shift;
+                # Add the parsed (separated) `--color WHEN` at the front of the arguments and fall
+                # through to the "normal" `--color WHEN` case.
+                set -- "${color_args[@]}" "$@"
+                ;&
+            "--color")
+                case "$2" in
                     "always")
                         USE_COLOR=2
                         ;;
