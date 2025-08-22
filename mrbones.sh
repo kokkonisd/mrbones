@@ -12,6 +12,13 @@ BUILD="unknown"
 DEPENDENCIES=(sed realpath find)
 set -e
 
+# This character is used to separate matches when parsing them, as spaces are valid characters that
+# might be included in matches.
+#
+# By default, "Unit Separator" (0x1F) is used; you can adapt it to something else if it does not
+# work for your use case.
+MATCH_SEPARATOR="␟"
+
 TEMPLATES_DIR_NAME="_templates"
 SITE_DIR_NAME="_site"
 VERBOSE=0
@@ -111,17 +118,84 @@ verbose_message() {
 }
 
 
+# Internal recursive helper function for `match_regex()`.
+#
+# Based on the [pure bash bible](https://github.com/dylanaraps/pure-bash-bible).
+match_all_regex() {
+    local string regex match_group_number matches
+
+    if [[ $# -lt 3 ]]
+    then
+        error "(INTERNAL): incorrect arguments to" \
+            "\`match_all_regex(string, regex, match_group_number, matches)\`."
+    fi
+
+    string=$1
+    regex=$2
+    match_group_number=$3
+    IFS="$MATCH_SEPARATOR" read -r -a matches <<< "$4"
+
+    if [[ $string =~ $regex ]]
+    then
+        new_match="${BASH_REMATCH[$match_group_number]}"
+        if [[ -n $new_match ]]
+        then
+            matches=("${matches[@]}" "$new_match")
+            encoded_matches=""
+            for match in "${matches[@]}"
+            do
+                encoded_matches+="$MATCH_SEPARATOR$match"
+            done
+            # Strip the leading match separator.
+            encoded_matches="${encoded_matches/"$MATCH_SEPARATOR"/}"
+
+            IFS="$MATCH_SEPARATOR" read -r -a matches <<< \
+                "$(match_all_regex "${string/"${BASH_REMATCH[0]}"/}" "$regex" \
+                    "$match_group_number" "$encoded_matches")"
+        fi
+    fi
+
+    output=""
+    for match in "${matches[@]}"
+    do
+        output+="$MATCH_SEPARATOR$match"
+    done
+    # Strip the leading match separator.
+    echo "${output/"$MATCH_SEPARATOR"/}"
+}
+
+
+# Get all the matching groups of a regex.
+match_regex() {
+    local string regex match_group_number
+
+    if [[ $# -ne 3 ]]
+    then
+        error "(INTERNAL): incorrect arguments to" \
+            "\`match_regex(string, regex, match_group_number)\`."
+    fi
+
+    string=$1
+    regex=$2
+    match_group_number=$3
+
+    match_all_regex "$string" "$regex" "$match_group_number" ""
+}
+
+
 # Get the cache of a source page (if it exists) via the page's absolute path.
 #
 # If caching is disabled, this function always results in a cache miss (by returning an empty
 # string).
 get_page_cache() {
+    local src_page_path cache result
+
     if [[ $# -ne 1 ]]
     then
         error "(INTERNAL): incorrect arguments to \`get_page_cache(src_page_path)\`."
     fi
 
-    local src_page_path="$1"
+    src_page_path="$1"
 
     if [[ $USE_CACHE == 0 ]]
     then
@@ -129,9 +203,11 @@ get_page_cache() {
         return
     fi
 
-    # We can declare and use on the same line here since we ignore the return value.
-    # shellcheck disable=SC2155
-    local result="$(sed -nE "s/${src_page_path//\//\\/}=(.+)$/\\1/p" "$MRBONES_CACHE")"
+    cache="$(cat "$MRBONES_CACHE")"
+    IFS="$MATCH_SEPARATOR" read -r -a matches <<< \
+        "$(match_regex "$cache" "$src_page_path=([^"$'\n'"]+)" 1)"
+    result="${matches[0]}"
+
     # Unescape any escaped characters.
     #
     # There is a subtlety here: we might have `\\n`s in the original source that will have become
@@ -189,10 +265,13 @@ handle_directives() {
 
     local cache=""
 
-
     verbose_message "    Handling \`@include\`s for '$src_page_path'..."
 
-    for include in $(echo "$page_content" | sed -nE 's/(^@include|[\s]*[^\\]@include) (.+)/\2/p')
+    local include_matches=()
+    IFS="$MATCH_SEPARATOR" read -r -a include_matches <<< \
+        "$(match_regex "$page_content" "(^@include|[\s]*[^\\]@include) ([^"$'\n'" ]+)" 2)"
+
+    for include in "${include_matches[@]}"
     do
         local include_path="$TEMPLATES_DIR/$include"
 
@@ -241,25 +320,26 @@ handle_directives() {
         local page_content="${page_content//@include $include/${include_body//$'&'/\\\&}}"
     done
     # At this point, no `@include`s should remain.
-    if [[ $(echo "$page_content" | sed -nE 's/(^@include|[\s]*[^\\]@include)/\1/p') != "" ]]
+    if [[ $page_content =~ (^@include|[\s]*[^\\]@include) ]]
     then
         error "$src_page_path: empty \`@include\`."
     fi
 
     verbose_message "    Handling \`@use\`s for '$src_page_path'..."
     # If there are multiple `@use`s, only the last one will be taken into account.
-    #
-    # We can declare and use on the same line here since we ignore the return value.
-    # shellcheck disable=SC2155
     local use_template=""
-    use_template="$( \
-        echo "$page_content" | sed -nE 's/(^@use|[\s]*[^\\]@use) (.+)/\2/p' | tail -n1 \
-    )"
+    local use_matches=()
+    IFS="$MATCH_SEPARATOR" read -r -a use_matches <<< \
+        "$(match_regex "$page_content" "(^@use|[\s]*[^\\]@use) ([^"$'\n'" ]+)" 2)"
+    if [[ ${#use_matches[@]} -gt 0 ]]
+    then
+        use_template="${use_matches[-1]}"
+    fi
 
     if [[ -z $use_template ]]
     then
         # If the template name is empty but there are `@use`s, then it's an error.
-        if [[ $(echo "$page_content" | sed -nE 's/(^@use|[\s]*[^\\]@use)/\1/p') != "" ]]
+        if [[ $page_content =~ (^@use|[\s]*[^\\]@use) ]]
         then
             error "$src_page_path: empty \`@use\`."
         else
@@ -312,7 +392,7 @@ handle_directives() {
         fi
 
         # At least one occurrence of "@content" must exist.
-        if [[ "$(echo "$use_template_content" | sed -nE 's/(@content)/\1/p')" == "" ]]
+        if [[ ! $use_template_content =~ (@content) ]]
         then
             error "$src_page_path: missing \`@content\` in \`@use\` template" \
                 "'$use_template_path'. Maybe you meant to \`@include\` instead?"
@@ -364,14 +444,17 @@ generate_page() {
     # Permalinks are registered via `@permalink <LINK>`. `<LINK>` needs to be an absolute path with
     # regards to the site root (i.e., needs to start with '/'). If there are multiple permalinks,
     # only the last one will be taken into account.
-    #
-    # We can declare and use on the same line here since we ignore the return value.
-    # shellcheck disable=SC2155
-    local raw_permalink="$( \
-        echo "$page_content" | sed -nE 's/@permalink (.+)/\1/p' | tail -n1 \
-    )"
+    local raw_permalink=""
+    local permalink_matches
+    IFS="$MATCH_SEPARATOR" read -r -a permalink_matches <<< \
+        "$(match_regex "$page_content" "(^@permalink|[\s]*[^\\]@permalink) ([^"$'\n'" ]+)" 2)"
+    if [[ ${#permalink_matches[@]} -gt 0 ]]
+    then
+        raw_permalink="${permalink_matches[-1]}"
+    fi
+
     # Remove any permalink(s) from the file.
-    page_content="$(echo "$page_content" | sed -E '/@permalink .+/d')"
+    page_content="$(echo "$page_content" | sed -E '/(^@permalink|[\s]*[^\\]@permalink) .+/d')"
     local permalink="$raw_permalink"
     # Make sure the permalink is an absolute path (i.e., starts with slash).
     if [[ -n $permalink ]] && [[ $(echo "$permalink" | cut -b1) != "/" ]]
