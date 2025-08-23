@@ -9,15 +9,7 @@
 VERSION="0.2.2-dev"
 # Do not edit this field. It is automatically populated during installation.
 BUILD="unknown"
-DEPENDENCIES=(sed realpath find)
 set -e
-
-# This character is used to separate matches when parsing them, as spaces are valid characters that
-# might be included in matches.
-#
-# By default, "Unit Separator" (0x1F) is used; you can adapt it to something else if it does not
-# work for your use case.
-MATCH_SEPARATOR="␟"
 
 TEMPLATES_DIR_NAME="_templates"
 SITE_DIR_NAME="_site"
@@ -29,7 +21,6 @@ VERBOSE=0
 USE_COLOR=1
 WORKING_DIR=$PWD
 USE_CACHE=1
-MRBONES_CACHE="${TMP_DIR:-/tmp}/.mrbones.cache"
 
 TEMPLATES_DIR="$WORKING_DIR/$TEMPLATES_DIR_NAME"
 SITE_DIR="$WORKING_DIR/$SITE_DIR_NAME"
@@ -118,441 +109,6 @@ verbose_message() {
 }
 
 
-# Internal recursive helper function for `match_regex()`.
-#
-# Based on the [pure bash bible](https://github.com/dylanaraps/pure-bash-bible).
-match_all_regex() {
-    local string regex match_group_number matches
-
-    if [[ $# -lt 3 ]]
-    then
-        error "(INTERNAL): incorrect arguments to" \
-            "\`match_all_regex(string, regex, match_group_number, matches)\`."
-    fi
-
-    string=$1
-    regex=$2
-    match_group_number=$3
-    IFS="$MATCH_SEPARATOR" read -r -a matches <<< "$4"
-
-    if [[ $string =~ $regex ]]
-    then
-        new_match="${BASH_REMATCH[$match_group_number]}"
-        if [[ -n $new_match ]]
-        then
-            matches=("${matches[@]}" "$new_match")
-            encoded_matches=""
-            for match in "${matches[@]}"
-            do
-                encoded_matches+="$MATCH_SEPARATOR$match"
-            done
-            # Strip the leading match separator.
-            encoded_matches="${encoded_matches/"$MATCH_SEPARATOR"/}"
-
-            IFS="$MATCH_SEPARATOR" read -r -a matches <<< \
-                "$(match_all_regex "${string/"${BASH_REMATCH[0]}"/}" "$regex" \
-                    "$match_group_number" "$encoded_matches")"
-        fi
-    fi
-
-    output=""
-    for match in "${matches[@]}"
-    do
-        output+="$MATCH_SEPARATOR$match"
-    done
-    # Strip the leading match separator.
-    echo "${output/"$MATCH_SEPARATOR"/}"
-}
-
-
-# Get all the matching groups of a regex.
-match_regex() {
-    local string regex match_group_number
-
-    if [[ $# -ne 3 ]]
-    then
-        error "(INTERNAL): incorrect arguments to" \
-            "\`match_regex(string, regex, match_group_number)\`."
-    fi
-
-    string=$1
-    regex=$2
-    match_group_number=$3
-
-    match_all_regex "$string" "$regex" "$match_group_number" ""
-}
-
-
-# Get the cache of a source page (if it exists) via the page's absolute path.
-#
-# If caching is disabled, this function always results in a cache miss (by returning an empty
-# string).
-get_page_cache() {
-    local src_page_path cache result
-
-    if [[ $# -ne 1 ]]
-    then
-        error "(INTERNAL): incorrect arguments to \`get_page_cache(src_page_path)\`."
-    fi
-
-    src_page_path="$1"
-
-    if [[ $USE_CACHE == 0 ]]
-    then
-        echo ""
-        return
-    fi
-
-    cache="$(cat "$MRBONES_CACHE")"
-    IFS="$MATCH_SEPARATOR" read -r -a matches <<< \
-        "$(match_regex "$cache" "$src_page_path=([^"$'\n'"]+)" 1)"
-    result="${matches[0]}"
-
-    # Unescape any escaped characters.
-    #
-    # There is a subtlety here: we might have `\\n`s in the original source that will have become
-    # `\\\\n`s after escaping. If we naively do `\\n` -> `\n`, then `\\\\n` -> `\\\n`, so we need
-    # to take care to convert `\\\n`s back to `\\n`s.
-    result="${result//\\n/$'\n'}"
-    result="${result//\\$'\n'/\\n}"
-    result="${result//\\\\/\\}"
-    result="${result//\\=/=}"
-
-    echo "$result"
-}
-
-
-# Set the cache of a source page.
-#
-# If caching is disabled, this function is a no-op.
-set_page_cache() {
-    if [[ $# -ne 2 ]]
-    then
-        error "(INTERNAL): incorrect arguments to \`set_page_cache(src_page_path, page_content)\`."
-    fi
-
-    local src_page_path="$1"
-    local page_content="$2"
-
-    if [[ $USE_CACHE == 0 ]]
-    then
-        return
-    fi
-
-    local result="$page_content"
-    # Escape some sensitive characters.
-    result="${result//\\/\\\\}"
-    result="${result//$'\n'/\\n}"
-    result="${result//=/\\=}"
-
-    echo "$src_page_path=$result" >> "$MRBONES_CACHE"
-}
-
-
-handle_directives() {
-    if [[ $# -ne 4 ]]
-    then
-        error \
-            "(INTERNAL): incorrect arguments to" \
-            "\`handle_directives(page_content, src_page_path,"\
-            "visited_include_paths, visited_use_paths)\`."
-    fi
-
-    local page_content="$1"
-    local src_page_path="$2"
-    local visited_include_paths="$3"
-    local visited_use_paths="$4"
-
-    local cache=""
-
-    verbose_message "    Handling \`@include\`s for '$src_page_path'..."
-
-    local include_matches=()
-    IFS="$MATCH_SEPARATOR" read -r -a include_matches <<< \
-        "$(match_regex "$page_content" "(^@include|[\s]*[^\\]@include) ([^"$'\n'" ]+)" 2)"
-
-    for include in "${include_matches[@]}"
-    do
-        local include_path="$TEMPLATES_DIR/$include"
-
-        # Check if include exists.
-        if [[ (! -f $include_path) || "$include_path" == "$TEMPLATES_DIR/" ]]
-        then
-            error "$src_page_path: file '$include_path' does not exist (missing \`@include\`" \
-                "target)."
-        fi
-
-        # If the current @include target is a path we've already visited, we're about to be stuck
-        # in a recursive loop; we need to error out.
-        if [[ $visited_include_paths == *$include_path* ]]
-        then
-            error "$src_page_path: recursive \`@include\` chain found" \
-                "(via \`@include\` target '$include')."
-        fi
-
-        cache="$(get_page_cache "$include_path")"
-        if [[ $cache == "" ]]
-        then
-            # We can declare and use on the same line here since we ignore the return value.
-            # shellcheck disable=SC2155
-            local include_body="$(cat "$include_path")"
-            # We need to handle includes recursively.
-            if ! include_body="$( \
-                    handle_directives \
-                        "$include_body" \
-                        "$include_path" \
-                        "$visited_include_paths:$include_path" \
-                        "$visited_use_paths" \
-                )"
-            then
-                exit 1
-            fi
-
-            set_page_cache "$include_path" "$include_body"
-        else
-            include_body="$cache"
-        fi
-
-        # Replace the `"@include (.+)"` string by the file in the captured group.
-        #
-        # Make sure to escape ampersands, as they have a different meaning (i.e., "replace with
-        # search term", here "@content").
-        local page_content="${page_content//@include $include/${include_body//$'&'/\\\&}}"
-    done
-    # At this point, no `@include`s should remain.
-    if [[ $page_content =~ (^@include|[\s]*[^\\]@include) ]]
-    then
-        error "$src_page_path: empty \`@include\`."
-    fi
-
-    verbose_message "    Handling \`@use\`s for '$src_page_path'..."
-    # If there are multiple `@use`s, only the last one will be taken into account.
-    local use_template=""
-    local use_matches=()
-    IFS="$MATCH_SEPARATOR" read -r -a use_matches <<< \
-        "$(match_regex "$page_content" "(^@use|[\s]*[^\\]@use) ([^"$'\n'" ]+)" 2)"
-    if [[ ${#use_matches[@]} -gt 0 ]]
-    then
-        use_template="${use_matches[-1]}"
-    fi
-
-    if [[ -z $use_template ]]
-    then
-        # If the template name is empty but there are `@use`s, then it's an error.
-        if [[ $page_content =~ (^@use|[\s]*[^\\]@use) ]]
-        then
-            error "$src_page_path: empty \`@use\`."
-        else
-            # No `@use`s, so nothing to do.
-            echo "$page_content"
-            return
-        fi
-    fi
-
-    # Check if the `@use` target is empty (whitespace).
-    if [[ -z "${use_template// }" ]]
-    then
-        error "$src_page_path: empty \`@use\`."
-    fi
-
-    # Remove any `@use`s from the file.
-    page_content="$(echo "$page_content" | sed -E '/(^@use|[\s]*[^\\]@use) .+/d')"
-
-    local use_template_path="$TEMPLATES_DIR/$use_template"
-    # Load the template.
-    if [[ ! -f $use_template_path ]]
-    then
-        error "$src_page_path: file '$use_template_path' does not exist (missing \`@use\` target)."
-    fi
-
-    # If the current @use target is a path we've already visited, we're about to be stuck
-    # in a recursive loop; we need to error out.
-    if [[ $visited_use_paths == *$use_template_path* ]]
-    then
-        error "$src_page_path: recursive \`@use\` chain found" \
-            "(via \`@use\` target '$use_template')."
-    fi
-
-    cache="$(get_page_cache "$use_template_path")"
-    if [[ $cache == "" ]]
-    then
-        # We can declare and use on the same line here since we ignore the return value.
-        # shellcheck disable=SC2155
-        local use_template_content="$(cat "$use_template_path")"
-        # Make sure to handle any `@include`s in the template.
-        if ! use_template_content="$( \
-                handle_directives \
-                    "$use_template_content" \
-                    "$use_template_path" \
-                    "$visited_include_paths" \
-                    "$visited_use_paths:$use_template_path" \
-            )"
-        then
-            exit 1
-        fi
-
-        # At least one occurrence of "@content" must exist.
-        if [[ ! $use_template_content =~ (@content) ]]
-        then
-            error "$src_page_path: missing \`@content\` in \`@use\` template" \
-                "'$use_template_path'. Maybe you meant to \`@include\` instead?"
-        fi
-
-        set_page_cache "$use_template_path" "$use_template_content"
-    else
-        use_template_content="$cache"
-    fi
-
-    # Replace "@content" by the current page content in the template. This becomes the content of
-    # the final page.
-    #
-    # Note that we have to escape backslashes here, or else they are interpreted as part of the
-    # pattern (and thus '\\' get converted to '\').
-    local escaped_page_content="${page_content//\\/\\\\}"
-    # Make sure to escape ampersands, as they have a different meaning (i.e., "replace with
-    # search term", here "@content").
-    escaped_page_content="${escaped_page_content//$'&'/\\\&}"
-    page_content="${use_template_content//@content/$escaped_page_content}"
-
-    echo "$page_content"
-}
-
-
-# Generate a page for the final site.
-#
-# All HTML pages (with extension ".html" or ".htm") are taken into account. Directives understood
-# by `mrbones` are expanded.
-generate_page() {
-    if [[ $# -ne 1 ]]
-    then
-        error "(INTERNAL) incorrect arguments to \`generate_page(src_page_path)\`."
-    fi
-
-    local src_page_path="$1"
-    # We can declare and use on the same line here since we ignore the return value.
-    # shellcheck disable=SC2155
-    local rel_src_page_path="$(realpath --relative-to="$WORKING_DIR" "$src_page_path")"
-    local dest_page_path="$SITE_DIR/$rel_src_page_path"
-    verbose_message "  Generating page '$rel_src_page_path'..."
-    # We can declare and use on the same line here since we ignore the return value.
-    # shellcheck disable=SC2155
-    local page_content=$(cat "$src_page_path")
-
-    verbose_message "    Resolving destination (permalink)..."
-    # Handle permalinks.
-    #
-    # Permalinks are registered via `@permalink <LINK>`. `<LINK>` needs to be an absolute path with
-    # regards to the site root (i.e., needs to start with '/'). If there are multiple permalinks,
-    # only the last one will be taken into account.
-    local raw_permalink=""
-    local permalink_matches
-    IFS="$MATCH_SEPARATOR" read -r -a permalink_matches <<< \
-        "$(match_regex "$page_content" "(^@permalink|[\s]*[^\\]@permalink) ([^"$'\n'" ]+)" 2)"
-    if [[ ${#permalink_matches[@]} -gt 0 ]]
-    then
-        raw_permalink="${permalink_matches[-1]}"
-    fi
-
-    # Remove any permalink(s) from the file.
-    page_content="$(echo "$page_content" | sed -E '/(^@permalink|[\s]*[^\\]@permalink) .+/d')"
-    local permalink="$raw_permalink"
-    # Make sure the permalink is an absolute path (i.e., starts with slash).
-    if [[ -n $permalink ]] && [[ $(echo "$permalink" | cut -b1) != "/" ]]
-    then
-        error "$src_page_path: permalink must be an absolute path (starting with '/')."
-    fi
-    # Make sure to normalize the permalink, by ensuring that it ends in ".html"/".htm".
-    if [[ -n $permalink ]] && [[ $permalink != *.htm ]] && [[ $permalink != *.html ]]
-    then
-        permalink="$permalink.html"
-    fi
-
-    if [[ -n $permalink ]]
-    then
-        dest_page_path="$SITE_DIR/$permalink"
-    fi
-
-    # At this point, we still need to check if the permalink escapes the $SITE_DIR.
-    # This is a quite obvious vulnerability: if someone uses `/../something` as a permalink, then
-    # we will naively generate a file outside $SITE_DIR.
-    #
-    # In order to check that we are not doing this, we need to use `realpath` to resolve the final
-    # path produced by the permalink. However, `realpath` will not work until the path is, well,
-    # real.
-    #
-    # To get around that, we need to first *create the dest directory anyway*, and then test with
-    # `realpath`. If it turns out that we have escaped $SITE_DIR, we can roll back that last action
-    # by removing the directory we just created.
-    #
-    # This temporary directory should not be a security issue. Since it is created with `mkdir -p`,
-    # it cannot overwrite existing data. At worst, an empty directory will be temporarily created
-    # outside $SITE_DIR, and will almost immediately be cleaned up.
-    #
-    # We can declare and use on the same line here since we ignore the return value.
-    # shellcheck disable=SC2155
-    local dest_page_dir="$(dirname "$dest_page_path")"
-    # Memorize if `$dest_page_dir` already exists; if yes, in case of a rollback, we don't need to
-    # remove it.
-    local dest_page_dir_exists=0
-    if [[ -e $dest_page_dir ]]
-    then
-        dest_page_dir_exists=1
-    fi
-    mkdir -p "$dest_page_dir"/
-    # Finally check that the permalink does not escape the $SITE_DIR.
-    if [[ -n $permalink ]] && \
-        [[ \
-            $(realpath -L \
-                "$SITE_DIR/$(realpath --relative-to="$SITE_DIR" "$SITE_DIR/$permalink")" \
-            )/ != $SITE_DIR/* \
-        ]]
-    then
-        # Roll back the temporary directory creation (if needed).
-        if [[ $dest_page_dir_exists == 0 ]]
-        then
-            rm -rf "${dest_page_dir:?}"/
-        fi
-        error "$src_page_path: permalink '$raw_permalink' escapes the generated site directory" \
-            "'$SITE_DIR'."
-    fi
-
-    page_content="$(handle_directives "$page_content" "$src_page_path" "" "")"
-
-    # We can declare and use on the same line here since we ignore the return value.
-    # shellcheck disable=SC2155
-    local rel_dest_page_path="$(realpath --relative-to="$SITE_DIR" "$dest_page_path")"
-    verbose_message "    Putting page in '$SITE_DIR_NAME/$rel_dest_page_path'..."
-
-    echo "$page_content" > "$dest_page_path"
-    # In order to support links that do not end in ".html"/".htm", we should generate dummy
-    # `index.html` pages that enable directories to work as pages.
-    #
-    # For example, if there is a page `/stuff/things.html`, then `/stuff/things` will lead to a 404
-    # by default. By creating a copy of the same page in `/stuff/things/index.html`, we enable that
-    # last URL to work as intended.
-    #
-    # This procedure shall be done on all pages except the ones titled 'index.html', since those
-    # have a special meaning anyway (and creating an `index/` subdirectory would be redundant).
-    if [[ $(basename "$rel_dest_page_path") != "index.html" ]]
-    then
-        # We can declare and use on the same line here since we ignore the return value.
-        # shellcheck disable=SC2155
-        local page_name="$(basename "$dest_page_path")"
-        local dest_copy_path="$dest_page_dir/${page_name%.*}/index.html"
-        # We can declare and use on the same line here since we ignore the return value.
-        # shellcheck disable=SC2155
-        local dest_copy_dir="$(dirname "$dest_copy_path")"
-        mkdir -p "$dest_copy_dir"/
-
-        # We can declare and use on the same line here since we ignore the return value.
-        # shellcheck disable=SC2155
-        local rel_dest_copy_path="$(realpath --relative-to="$SITE_DIR" "$dest_copy_path")"
-        verbose_message "    Creating page copy in '$SITE_DIR_NAME/$rel_dest_copy_path'..."
-        echo "$page_content" > "$dest_copy_path"
-    fi
-}
-
-
 # Parse arguments to `mrbones`.
 parse_arguments() {
     while [[ $# -gt 0 ]]
@@ -630,34 +186,13 @@ parse_arguments() {
 }
 
 
-# Check that the necessary dependencies exist.
-check_dependencies() {
-    for dependency in "${DEPENDENCIES[@]}"
-    do
-        if [[ ! $(command -v "$dependency") ]]
-        then
-            error "missing dependency: $dependency."
-        fi
-    done
-}
-
-
-# Run `mrbones`.
 main() {
-    check_dependencies
     parse_arguments "$@"
-
     info_message "Setting up output directory '$SITE_DIR'..."
     verbose_message "  Removing '$SITE_DIR/'..."
     rm -rf "$SITE_DIR"
     verbose_message "  Creating '$SITE_DIR/'..."
     mkdir -p "$SITE_DIR"
-
-    if [[ $USE_CACHE == 1 ]]
-    then
-        touch "$MRBONES_CACHE"
-        truncate --size=0 "$MRBONES_CACHE"
-    fi
 
     info_message "Copying site content..."
     # Make sure to *not* copy templates and the output site directory.
@@ -677,14 +212,195 @@ main() {
         | sort \
     )
 
-    for src_page in $src_pages
+    declare -A cache
+    for src_page_path in $src_pages
     do
-        generate_page "$src_page"
-    done
+        rel_src_page_path="${src_page_path##"$WORKING_DIR/"}"
+        dest_page_path="$SITE_DIR/$rel_src_page_path"
+        verbose_message "  Generating page '$rel_src_page_path'..."
 
+        page_content="$(cat "$src_page_path")"
+
+        permalink=""
+        permalink_regex="(^@permalink|[ \t]+@permalink) ([^"$'\n'" ]+)"
+        if [[ $page_content =~ $permalink_regex ]]
+        then
+            permalink="${BASH_REMATCH[2]}"
+            # Remove any `@permalink <PERMALINK>`s.
+            page_content="${page_content//"${BASH_REMATCH[0]}"}"
+        fi
+
+        if [[ -n $permalink ]]
+        then
+            verbose_message "    Resolving destination (permalink)..."
+            if [[ ${permalink:0:1} != "/" ]]
+            then
+                error "$src_page_path: permalink must be an absolute path (starting with '/')."
+            fi
+
+            # Make sure to normalize the permalink, ensuring that it ends in ".html"/".htm".
+            if [[ ($permalink != *.htm) && ($permalink != *.html) ]]
+            then
+                permalink="$permalink.html"
+            fi
+
+            # ".." is not allowed in the permalink.
+            if [[ $permalink == *..* ]]
+            then
+                error "$src_page_path: permalink '$permalink' could be escaping the generated site" \
+                    "directory '$SITE_DIR'."
+            fi
+
+            # Remove the leading '/' of the permalink.
+            dest_page_path="$SITE_DIR/${permalink#/*}"
+        fi
+
+
+        # Handle `@use`s.
+        # TODO: fix regex to handle `\@use`.
+        use_regex="@use ([^"$'\n'" ]+)"
+        while [[ $page_content =~ $use_regex ]]
+        do
+            use_target="${BASH_REMATCH[1]}"
+            verbose_message "    Handling \`@use $use_target\`..."
+
+            # Check that the use target exists.
+            if [[ ! -f "$TEMPLATES_DIR/$use_target" ]]
+            then
+                error "$src_page_path: \`@use\` target '$use_target' not found in $TEMPLATES_DIR."
+            fi
+
+            # Possibly look at the cache for the `@use` target.
+            if [[ $USE_CACHE == 1 ]]
+            then
+                use_template_content="${cache[$use_target]}"
+                if [[ -z $use_template_content ]]
+                then
+                    use_template_content="$(cat "$TEMPLATES_DIR/$use_target")"
+                    cache["$use_target"]="$use_template_content"
+                fi
+            else
+                use_template_content="$(cat "$TEMPLATES_DIR/$use_target")"
+            fi
+
+            # Parse the `@use` content from the current file.
+            declare -A content_sections
+            # TODO: fix regex to handle `\@begin`.
+            begin_regex="@begin ([0-9a-zA-Z_]+)"
+            while [[ $page_content =~ $begin_regex ]]
+            do
+                begin_match="${BASH_REMATCH[0]}"
+                section_name="${BASH_REMATCH[1]}"
+
+                # TODO: fix regex to handle `\@end`.
+                end_regex="@end $section_name"
+
+                if [[ $page_content =~ $end_regex ]]
+                then
+                    end_match="${BASH_REMATCH[0]}"
+                    section_regex="$begin_match"$'\n'"(.+)"$'\n'"$end_match"
+
+                    if [[ $page_content =~ $section_regex ]]
+                    then
+                        section_match="${BASH_REMATCH[0]}"
+                        section_content="${BASH_REMATCH[1]}"
+
+                        content_sections["$section_name"]="$section_content"
+                        # Eat the section.
+                        page_content="${page_content//"$section_match"}"
+                    else
+                        error "INTERNAL: should be able to find section: $section_regex"
+                    fi
+
+                else
+                    error "$src_page_path: can't find matching \`@end $section_name\`."
+                fi
+            done
+
+            # Apply the discovered content sections.
+            # TODO handle `\@content`.
+            content_regex="@content\.([0-9a-zA-Z_-]+)($|[^0-9a-zA-Z_-]+)"
+            while [[ $use_template_content =~ $content_regex ]]
+            do
+                content_match="${BASH_REMATCH[0]}"
+                content_key="${BASH_REMATCH[1]}"
+                post_content="${BASH_REMATCH[2]}"
+                content="${content_sections[$content_key]}"
+
+                # If the key exists in the page, then replace it with the actual contents.
+                # Otherwise, just delete the `@content.$key` part.
+                if [[ -n $content ]]
+                then
+                    replacement="$content$post_content"
+                else
+                    replacement="$post_content"
+                fi
+
+                use_template_content="${use_template_content//"$content_match"/"$replacement"}"
+            done
+
+            page_content="$use_template_content"
+        done
+
+        # Handle `@include`s.
+        # TODO: fix regex to handle `\@include`.
+        include_regex="@include ([^"$'\n'" ]+)"
+        while [[ $page_content =~ $include_regex ]]
+        do
+            include_match="${BASH_REMATCH[0]}"
+            include_target="${BASH_REMATCH[1]}"
+            verbose_message "    Handling \`@include $include_target\`..."
+
+            # Check that the include target exists.
+            if [[ ! -f "$TEMPLATES_DIR/$include_target" ]]
+            then
+                error "$src_page_path: \`@include\` target '$include_target' not found in $TEMPLATES_DIR."
+            fi
+
+            # Possibly look at the cache for the `@include` target.
+            if [[ $USE_CACHE == 1 ]]
+            then
+                include_template_content="${cache[$include_target]}"
+                if [[ -z $use_template_content ]]
+                then
+                    include_template_content="$(cat "$TEMPLATES_DIR/$include_target")"
+                    cache["$include_target"]="$include_template_content"
+                fi
+            else
+                include_template_content="$(cat "$TEMPLATES_DIR/$include_target")"
+            fi
+
+            page_content="${page_content//"$include_match"/"$include_template_content"}"
+        done
+
+        verbose_message "    Putting page in '$dest_page_path'..."
+        dest_page_dir="${dest_page_path%/*}"
+        mkdir -p "$dest_page_dir"
+        echo "$page_content" > "$dest_page_path"
+
+        # In order to support links that do not end in ".html"/".htm", we should generate dummy
+        # `index.html` pages that enable directories to work as pages.
+        #
+        # For example, if there is a page `/stuff/things.html`, then `/stuff/things` will lead to a 404
+        # by default. By creating a copy of the same page in `/stuff/things/index.html`, we enable that
+        # last URL to work as intended.
+        #
+        # This procedure shall be done on all pages except the ones titled 'index.html', since those
+        # have a special meaning anyway (and creating an `index/` subdirectory would be redundant).
+        if [[ $rel_src_page_path != "index.html" ]]
+        then
+            page_filename="${dest_page_path##*/}"
+            page_name="${page_filename%%.*}"
+            page_name_dir="$dest_page_dir/$page_name"
+            mkdir -p "$page_name_dir"
+            echo "$page_content" > "$page_name_dir/index.html"
+        fi
+
+    done
 
     info_message "Done! Site is ready at '$SITE_DIR'."
 }
+
 
 # If the script is `source`d (as is the case during unit tests), do not run `main()`.
 if ! (return 0 2>/dev/null)
