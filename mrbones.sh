@@ -6,9 +6,10 @@
 ## International License. See the accompanying LICENSE file for more info.
 
 
-VERSION="0.2.2-dev"
+VERSION="0.3.0-dev"
 # Do not edit this field. It is automatically populated during installation.
 BUILD="unknown"
+DEPENDENCIES=(realpath find sort)
 set -e
 
 TEMPLATES_DIR_NAME="_templates"
@@ -20,10 +21,23 @@ VERBOSE=0
 # - 2: always
 USE_COLOR=1
 WORKING_DIR=$PWD
-USE_CACHE=1
 
 TEMPLATES_DIR="$WORKING_DIR/$TEMPLATES_DIR_NAME"
 SITE_DIR="$WORKING_DIR/$SITE_DIR_NAME"
+
+ESCAPED_AT="{@@MRBONES@@}"
+
+USE_TARGET_REGEX="[a-zA-Z0-9._/-]+"
+INCLUDE_TARGET_REGEX="$USE_TARGET_REGEX"
+PERMALINK_TARGET_REGEX="$USE_TARGET_REGEX"
+CONTENT_SECTION_NAME_REGEX="[a-zA-Z0-9_-]+"
+PERMALINK_REGEX="@permalink ($PERMALINK_TARGET_REGEX)[ \t]*"$'\n'
+USE_REGEX="@use"
+USE_REGEX_FULL="@use ($USE_TARGET_REGEX)"
+INCLUDE_REGEX="@include"
+INCLUDE_REGEX_FULL="@include ($INCLUDE_TARGET_REGEX)"
+BEGIN_REGEX_FULL="@begin ($CONTENT_SECTION_NAME_REGEX)"
+CONTENT_REGEX="@content\.($CONTENT_SECTION_NAME_REGEX)([^a-zA-Z0-9_-]?)"
 
 # Check globally if we're in a tty. This should be done here because inside a function the context
 # at the callsite may change the result.
@@ -73,14 +87,12 @@ error_message() {
     fi
 }
 
-
 # Print an error message to `stderr` and exit with code 1.
 error() {
     error_message "$@"
     rm -rf "${SITE_DIR:?}/"
     exit 1
 }
-
 
 # Print an info message to `stderr`.
 info_message() {
@@ -91,7 +103,6 @@ info_message() {
         echo "[mrbones]  $*" 1>&2
     fi
 }
-
 
 # Print a verbose message to `stderr`.
 verbose_message() {
@@ -108,15 +119,15 @@ verbose_message() {
     fi
 }
 
-
 # Parse arguments to `mrbones`.
 parse_arguments() {
+    local color_args
+
     while [[ $# -gt 0 ]]
     do
         case $1 in
             --color=*)
                 # In case the user passed `--color=WHEN`, split on the `=`.
-                local color_args=""
                 IFS='=' read -ra color_args <<< "$1"
                 # Skip the `--color=WHEN` argument now that we've parsed it.
                 shift;
@@ -151,15 +162,9 @@ parse_arguments() {
                     "\n                  - auto: sensible defaults apply" \
                     "\n                  - always: color is always used" \
                     "\n  -h, --help      print this help message" \
-                    "\n  --no-cache      disable template page caching" \
                     "\n  -v, --verbose   print more verbose messages" \
                     "\n  -V, --version   print this program's version number"
                 exit 0
-                ;;
-            "--no-cache")
-                USE_CACHE=0
-                # Skip over `--no-cache`.
-                shift
                 ;;
             "-v" | "--verbose")
                 VERBOSE=1
@@ -185,8 +190,27 @@ parse_arguments() {
     done
 }
 
+# Check that the necessary dependencies exist.
+check_dependencies() {
+    for dependency in "${DEPENDENCIES[@]}"
+    do
+        if [[ ! $(command -v "$dependency") ]]
+        then
+            error "missing dependency: $dependency."
+        fi
+    done
+}
 
 main() {
+    local site_content rel_file_path parent_dir_path src_pages cache src_page_path \
+        rel_src_page_path dest_page_path page_content raw_permalink_target permalink_match \
+        use_chain use_target use_template_content content_sections begin_match section_name \
+        end_regex_full end_match section_regex section_match section_content content_match \
+        content_key post_content content replacement include_chain include_match include_target \
+        include_template_content rel_dest_page_path dest_page_dir page_filename page_name \
+        page_name_dir
+
+    check_dependencies
     parse_arguments "$@"
     info_message "Setting up output directory '$SITE_DIR'..."
     verbose_message "  Removing '$SITE_DIR/'..."
@@ -198,68 +222,88 @@ main() {
     # Make sure to *not* copy templates and the output site directory.
     # We are also *not* copying HTML files, since we have already treated them before and put them
     # where they belong (according to the permalinks).
-    rsync -a "$WORKING_DIR"/* "$SITE_DIR" \
-        --exclude "$TEMPLATES_DIR_NAME" --exclude "$SITE_DIR_NAME" \
-        --exclude "*.html" --exclude "*.htm" \
-        --prune-empty-dirs
+    mapfile -t site_content < <( \
+        find "$WORKING_DIR" -type f \
+        -not -name "*.html" \
+        -not -name "*.htm" \
+        -not -path "$SITE_DIR/*" \
+        -not -path "$TEMPLATES_DIR/*" \
+    )
+    for file_path in "${site_content[@]}"
+    do
+        rel_file_path="${file_path##"$WORKING_DIR/"}"
+        parent_dir_path="$SITE_DIR/${rel_file_path%/*}"
+        mkdir -p "$parent_dir_path"
+        cp "$file_path" "$parent_dir_path"
+    done
 
     info_message "Generating pages..."
 
-    src_pages=$( \
-        find "$WORKING_DIR" -name "*.html" \
+    mapfile -t src_pages < <( \
+        find "$WORKING_DIR" -type f \
+            "(" -name "*.html" -or -name "*.htm" ")" \
             -not -path "$SITE_DIR/*" \
             -not -path "$TEMPLATES_DIR/*" \
         | sort \
     )
 
-    declare -A cache
-    for src_page_path in $src_pages
+    declare -A cache=()
+    for src_page_path in "${src_pages[@]}"
     do
         rel_src_page_path="${src_page_path##"$WORKING_DIR/"}"
         dest_page_path="$SITE_DIR/$rel_src_page_path"
         verbose_message "  Generating page '$rel_src_page_path'..."
 
-        page_content="$(cat "$src_page_path")"
+        page_content="$(<"$src_page_path")"
+        # We escape any literal `\@`s to avoid mistaking them for directives.
+        # We will put them back at the end.
+        page_content="${page_content//"\\@"/"$ESCAPED_AT"}"
 
-        permalink=""
-        permalink_regex="(^@permalink|[ \t]+@permalink) ([^"$'\n'" ]+)"
-        if [[ $page_content =~ $permalink_regex ]]
+        raw_permalink_target=""
+        if [[ $page_content =~ $PERMALINK_REGEX ]]
         then
-            permalink="${BASH_REMATCH[2]}"
+            raw_permalink_target="${BASH_REMATCH[1]}"
+
             # Remove any `@permalink <PERMALINK>`s.
-            page_content="${page_content//"${BASH_REMATCH[0]}"}"
+            while [[ $page_content =~ $PERMALINK_REGEX ]]
+            do
+                permalink_match="${BASH_REMATCH[0]}"
+                page_content="${page_content//"$permalink_match"}"
+            done
         fi
 
-        if [[ -n $permalink ]]
+        if [[ -n $raw_permalink_target ]]
         then
             verbose_message "    Resolving destination (permalink)..."
-            if [[ ${permalink:0:1} != "/" ]]
+            if [[ ${raw_permalink_target:0:1} != "/" ]]
             then
-                error "$src_page_path: permalink must be an absolute path (starting with '/')."
+                error "$src_page_path: \`@permalink $raw_permalink_target\`: permalinks must be" \
+                    "absolute paths (starting with '/')."
             fi
 
+            permalink_target="$raw_permalink_target"
             # Make sure to normalize the permalink, ensuring that it ends in ".html"/".htm".
-            if [[ ($permalink != *.htm) && ($permalink != *.html) ]]
+            if [[ ($permalink_target != *.htm) && ($permalink_target != *.html) ]]
             then
-                permalink="$permalink.html"
+                permalink_target="$permalink_target.html"
             fi
 
             # ".." is not allowed in the permalink.
-            if [[ $permalink == *..* ]]
+            if [[ $permalink_target == *..* ]]
             then
-                error "$src_page_path: permalink '$permalink' could be escaping the generated site" \
-                    "directory '$SITE_DIR'."
+                error "$src_page_path: \`@permalink $raw_permalink_target\`: '..' is not allowed" \
+                    "in permalinks."
             fi
 
             # Remove the leading '/' of the permalink.
-            dest_page_path="$SITE_DIR/${permalink#/*}"
+            dest_page_path="$SITE_DIR/${permalink_target#/*}"
         fi
 
 
         # Handle `@use`s.
-        # TODO: fix regex to handle `\@use`.
-        use_regex="@use ([^"$'\n'" ]+)"
-        while [[ $page_content =~ $use_regex ]]
+        # Keep track of which `@use` targets have been already handled to identify recursion.
+        declare -A use_chain=()
+        while [[ $page_content =~ $USE_REGEX_FULL ]]
         do
             use_target="${BASH_REMATCH[1]}"
             verbose_message "    Handling \`@use $use_target\`..."
@@ -270,32 +314,35 @@ main() {
                 error "$src_page_path: \`@use\` target '$use_target' not found in $TEMPLATES_DIR."
             fi
 
-            # Possibly look at the cache for the `@use` target.
-            if [[ $USE_CACHE == 1 ]]
+            # Check if we've already seen the target.
+            if [[ -v use_chain["$use_target"] ]]
             then
-                use_template_content="${cache[$use_target]}"
-                if [[ -z $use_template_content ]]
-                then
-                    use_template_content="$(cat "$TEMPLATES_DIR/$use_target")"
-                    cache["$use_target"]="$use_template_content"
-                fi
+                error "$src_page_path: \`@use $use_target\`: recursive \`@use\`."
             else
-                use_template_content="$(cat "$TEMPLATES_DIR/$use_target")"
+                use_chain["$use_target"]=1
+            fi
+
+            # Look at the cache for the `@use` target.
+            use_template_content="${cache[$use_target]}"
+            if [[ -z $use_template_content ]]
+            then
+                use_template_content="$(<"$TEMPLATES_DIR/$use_target")"
+                # We escape any literal `\@`s to avoid mistaking them for directives.
+                # We will put them back at the end.
+                use_template_content="${use_template_content//"\\@"/"$ESCAPED_AT"}"
+                cache["$use_target"]="$use_template_content"
             fi
 
             # Parse the `@use` content from the current file.
-            declare -A content_sections
-            # TODO: fix regex to handle `\@begin`.
-            begin_regex="@begin ([0-9a-zA-Z_]+)"
-            while [[ $page_content =~ $begin_regex ]]
+            declare -A content_sections=()
+            while [[ $page_content =~ $BEGIN_REGEX_FULL ]]
             do
                 begin_match="${BASH_REMATCH[0]}"
                 section_name="${BASH_REMATCH[1]}"
 
-                # TODO: fix regex to handle `\@end`.
-                end_regex="@end $section_name"
+                end_regex_full="@end $section_name"
 
-                if [[ $page_content =~ $end_regex ]]
+                if [[ $page_content =~ $end_regex_full ]]
                 then
                     end_match="${BASH_REMATCH[0]}"
                     section_regex="$begin_match"$'\n'"(.+)"$'\n'"$end_match"
@@ -318,9 +365,7 @@ main() {
             done
 
             # Apply the discovered content sections.
-            # TODO handle `\@content`.
-            content_regex="@content\.([0-9a-zA-Z_-]+)($|[^0-9a-zA-Z_-]+)"
-            while [[ $use_template_content =~ $content_regex ]]
+            while [[ $use_template_content =~ $CONTENT_REGEX ]]
             do
                 content_match="${BASH_REMATCH[0]}"
                 content_key="${BASH_REMATCH[1]}"
@@ -342,10 +387,17 @@ main() {
             page_content="$use_template_content"
         done
 
+        # We should be done with `@use`s by now. If there are any left over, it means that their
+        # targets are empty.
+        if [[ $page_content =~ $USE_REGEX ]]
+        then
+            error "$src_page_path: empty \`@use\`."
+        fi
+
         # Handle `@include`s.
-        # TODO: fix regex to handle `\@include`.
-        include_regex="@include ([^"$'\n'" ]+)"
-        while [[ $page_content =~ $include_regex ]]
+        # Keep track of which `@include` targets have been already handled to identify recursion.
+        declare -A include_chain=()
+        while [[ $page_content =~ $INCLUDE_REGEX_FULL ]]
         do
             include_match="${BASH_REMATCH[0]}"
             include_target="${BASH_REMATCH[1]}"
@@ -354,36 +406,54 @@ main() {
             # Check that the include target exists.
             if [[ ! -f "$TEMPLATES_DIR/$include_target" ]]
             then
-                error "$src_page_path: \`@include\` target '$include_target' not found in $TEMPLATES_DIR."
+                error "$src_page_path: \`@include\` target '$include_target' not found in" \
+                    "$TEMPLATES_DIR."
             fi
 
-            # Possibly look at the cache for the `@include` target.
-            if [[ $USE_CACHE == 1 ]]
+            # Check if we've already seen the target.
+            if [[ -v include_chain["$include_target"] ]]
             then
-                include_template_content="${cache[$include_target]}"
-                if [[ -z $use_template_content ]]
-                then
-                    include_template_content="$(cat "$TEMPLATES_DIR/$include_target")"
-                    cache["$include_target"]="$include_template_content"
-                fi
+                error "$src_page_path: \`@include $include_target\`: recursive \`@include\`."
             else
+                include_chain["$include_target"]=1
+            fi
+
+            # Look at the cache for the `@include` target.
+            include_template_content="${cache[$include_target]}"
+            if [[ -z $include_template_content ]]
+            then
                 include_template_content="$(cat "$TEMPLATES_DIR/$include_target")"
+                # We escape any literal `\@`s to avoid mistaking them for directives.
+                # We will put them back at the end.
+                include_template_content="${include_template_content//"\\@"/"$ESCAPED_AT"}"
+                cache["$include_target"]="$include_template_content"
             fi
 
             page_content="${page_content//"$include_match"/"$include_template_content"}"
         done
 
-        verbose_message "    Putting page in '$dest_page_path'..."
+        # We should be done with `@include`s by now. If there are any left over, it means that their
+        # targets are empty.
+        if [[ $page_content =~ $INCLUDE_REGEX ]]
+        then
+            error "$src_page_path: empty \`@include\`."
+        fi
+
+        rel_dest_page_path="${dest_page_path##"$SITE_DIR/"}"
         dest_page_dir="${dest_page_path%/*}"
+        verbose_message "    Putting page in '$SITE_DIR_NAME/$rel_dest_page_path'..."
         mkdir -p "$dest_page_dir"
+        # Since we potentially escaped some literal `\@`s to avoid mistaking them for directives,
+        # it is now time to put them back.
+        page_content="${page_content//"$ESCAPED_AT"/"\\@"}"
         echo "$page_content" > "$dest_page_path"
 
         # In order to support links that do not end in ".html"/".htm", we should generate dummy
         # `index.html` pages that enable directories to work as pages.
         #
-        # For example, if there is a page `/stuff/things.html`, then `/stuff/things` will lead to a 404
-        # by default. By creating a copy of the same page in `/stuff/things/index.html`, we enable that
-        # last URL to work as intended.
+        # For example, if there is a page `/stuff/things.html`, then `/stuff/things` will lead to a
+        # 404 by default. By creating a copy of the same page in `/stuff/things/index.html`, we
+        # enable that last URL to work as intended.
         #
         # This procedure shall be done on all pages except the ones titled 'index.html', since those
         # have a special meaning anyway (and creating an `index/` subdirectory would be redundant).
@@ -392,10 +462,11 @@ main() {
             page_filename="${dest_page_path##*/}"
             page_name="${page_filename%%.*}"
             page_name_dir="$dest_page_dir/$page_name"
+            rel_dest_page_path="${page_name_dir##"$SITE_DIR/"}/index.html"
+            verbose_message "    Creating page copy in '$SITE_DIR_NAME/$rel_dest_page_path'..."
             mkdir -p "$page_name_dir"
             echo "$page_content" > "$page_name_dir/index.html"
         fi
-
     done
 
     info_message "Done! Site is ready at '$SITE_DIR'."

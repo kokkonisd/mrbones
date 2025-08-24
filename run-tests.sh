@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 
-DEPENDENCIES=(sed realpath find sort curl python3)
+DEPENDENCIES=(realpath find sort curl python3)
 TEST_SERVER_PORT=4444
 TEST_SERVER_WAIT_TIME_SECONDS=0.5
 
@@ -31,25 +31,6 @@ run_baseline_tests() {
         # Strip terminating '/' from the path.
         test_dir="${test_dir::-1}"
         echo -en "\e[1mRunning\e[0m \e[38;5;244m$test_dir\e[0m \e[1m...\e[0m " 1>&2
-
-        # Run no-cache test.
-        baseline=$(cat "$test_dir/baseline.err.nocache" 2>/dev/null || echo "")
-        # Replace $TEST_DIR with the actual test directory in baselines.
-        baseline="${baseline//\$TEST_DIR/$test_dir}"
-        actual_output="$(bash "$MRBONES" --no-cache --verbose --color=never "$test_dir/src" 2>&1)"
-        output_diff="$(diff --color=always <(echo "$baseline") <(echo "$actual_output"))"
-        if [[ "$output_diff" != "" ]]
-        then
-            echo -e "\e[1m\e[31mFAIL\e[0m" 1>&2
-            tests_failed=$((tests_failed + 1))
-
-            echo -e "  \e[1m\e[91mno-cache baseline\e[39m does not match" \
-                "\e[32mactual output\e[39m:\e[0m"
-            echo "$output_diff" 1>&2
-            # Clean up build artifacts.
-            rm -rf "$test_dir/src/_site"
-            continue
-        fi
 
         baseline=$(cat "$test_dir/baseline.err" 2>/dev/null || echo "")
         # Replace $TEST_DIR with the actual test directory in baselines.

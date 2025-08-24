@@ -8,9 +8,9 @@ A bare-bones static site generator in the form of a **single Bash script**.
 
 Currently, `mrbones` is only supported on Linux systems. It has the following dependencies:
 
-- [GNU sed](https://www.gnu.org/software/sed/)
-- realpath (from [GNU coreutils](https://www.gnu.org/software/coreutils/))
-- find (from [GNU findutils](https://www.gnu.org/software/findutils/))
+- [GNU Bash](https://www.gnu.org/software/bash/) 4.4+
+- `realpath` and `sort` (from [GNU coreutils](https://www.gnu.org/software/coreutils/))
+- `find` (from [GNU findutils](https://www.gnu.org/software/findutils/))
 - [GNU Make](https://www.gnu.org/software/make/) (optionally, if you wish to use the Makefile)
 - [pre-commit](https://pre-commit.com/) (optionally, if you wish to run local tests or develop)
 
