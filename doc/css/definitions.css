@@ -1,0 +1,24 @@
+@import url("fonts.css");
+
+
+:root {
+    --text-font: "Kreon Variable";
+    --main-font-size: 16pt;
+    --code-font: "Courier Prime";
+    --code-font-size: 14pt;
+
+    --background-color: #F5DDB8;
+    --header-background-color: #D0AC76;
+    --aside-background-color: #A07639;
+
+    --normal-link-color: #779FA1;
+    --active-link-color: #8BB9BB;
+
+    --aside-normal-link-color: #F5DDB8;
+    --aside-active-link-color: #FFEFD6;
+
+    --code-color: #FF6542;
+    --code-background-color: #564154;
+
+    --extra-color: #88498F;
+}

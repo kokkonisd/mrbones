@@ -1,0 +1,121 @@
+@import url("definitions.css");
+
+
+html body {
+    margin: 0;
+    padding: 0;
+
+    font-family: var(--text-font);
+    font-size: var(--main-font-size);
+    background-color: var(--background-color);
+}
+
+#wrapper {
+    display: grid;
+    grid-template-columns: 1fr 5fr;
+    grid-gap: 1em;
+}
+
+a {
+    /*
+     * Some super long URLs overflow the page horizontally.
+     */
+    word-wrap: break-word;
+
+    &, &:visited {
+        color: var(--normal-link-color);
+    }
+
+    &:hover {
+        color: var(--active-link-color);
+    }
+}
+
+code {
+    font-family: var(--code-font);
+    font-size: var(--code-font-size);
+
+    padding: 1pt 4pt;
+    color: var(--code-color);
+    background-color: var(--code-background-color);
+}
+
+ol {
+    list-style: none;
+    padding-left: 1em;
+}
+
+nav {
+    color: var(--background-color);
+    background: var(--aside-background-color);
+
+    a {
+        text-decoration: none;
+
+        &, &:visited {
+            color: var(--aside-normal-link-color);
+        }
+
+        &:hover {
+            color: var(--aside-active-link-color);
+        }
+    }
+}
+
+hgroup,h1, h2, h3, h4, h5, h6 {
+    a, a:visited, a:hover {
+        color: inherit;
+        text-decoration: none;
+    }
+}
+
+hgroup {
+    background-color: var(--header-background-color);
+    text-align: center;
+
+    h1 {
+        margin: 0px;
+    }
+
+    p.subtitle {
+        margin: 0px;
+        font-size: 1.5em;
+        font-style: italic;
+    }
+}
+
+h2:not(.no-link) {
+    display: list-item;
+    list-style-type: none;
+    width: fit-content;
+
+    border-bottom: 2px dotted var(--extra-color);
+
+    &:hover::marker {
+        content: "§  ";
+        color: rgba(0, 0, 0, 30%);
+    }
+
+}
+
+main {
+    width: 100%;
+
+
+    @media only screen and (min-width: 768px) {
+        width: 80%;
+    }
+}
+
+
+footer {
+    text-align: center;
+
+    hr {
+        margin-top: 0px;
+    }
+
+    p {
+        margin: 0;
+    }
+}

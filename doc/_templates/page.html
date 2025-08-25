@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+        @include includes/base-head.html
+
+        <title>@content.title</title>
+
+        @content.head-extras
+    </head>
+
+    <body>
+        <hgroup>
+            <a href="/">
+                <h1>☠️ mrbones ☠️</h1>
+                <p class="subtitle">a bare-bones static site generator</p>
+            </a>
+        </hgroup>
+
+        <div id="wrapper">
+            @include includes/nav.html
+
+            <main>
+                @content.main
+            </main>
+        </div>
+
+        @include includes/footer.html
+    </body>
+
+</html>
