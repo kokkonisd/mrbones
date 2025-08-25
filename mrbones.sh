@@ -71,7 +71,7 @@ should_use_color() {
             return 0  # True
             ;;
         *)
-            echo "(INTERNAL): invalid value '$USE_COLOR' for \$USE_COLOR." 1>&2
+            echo "INTERNAL: invalid value '$USE_COLOR' for \$USE_COLOR." 1>&2
             exit 1
             ;;
     esac
