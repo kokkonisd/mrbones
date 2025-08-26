@@ -10,12 +10,6 @@ html body {
     background-color: var(--background-color);
 }
 
-#wrapper {
-    display: grid;
-    grid-template-columns: 1fr 5fr;
-    grid-gap: 1em;
-}
-
 a {
     /*
      * Some super long URLs overflow the page horizontally.
@@ -31,7 +25,7 @@ a {
     }
 }
 
-code {
+pre, code {
     font-family: var(--code-font);
     font-size: var(--code-font-size);
 
@@ -42,24 +36,7 @@ code {
 
 ol {
     list-style: none;
-    padding-left: 1em;
-}
-
-nav {
-    color: var(--background-color);
-    background: var(--aside-background-color);
-
-    a {
-        text-decoration: none;
-
-        &, &:visited {
-            color: var(--aside-normal-link-color);
-        }
-
-        &:hover {
-            color: var(--aside-active-link-color);
-        }
-    }
+    padding-left: 0px;
 }
 
 hgroup,h1, h2, h3, h4, h5, h6 {
@@ -84,7 +61,7 @@ hgroup {
     }
 }
 
-h2:not(.no-link) {
+h2, h3 :not(.no-link) {
     display: list-item;
     list-style-type: none;
     width: fit-content;
@@ -98,18 +75,23 @@ h2:not(.no-link) {
 
 }
 
+h2:not(.no-link) {
+    margin-top: 2em;
+}
+
 main {
+    margin: 0 auto;
     width: 100%;
 
-
     @media only screen and (min-width: 768px) {
-        width: 80%;
+        width: 60%;
     }
 }
 
 
 footer {
     text-align: center;
+    margin-bottom: 1em;
 
     hr {
         margin-top: 0px;
@@ -118,4 +100,9 @@ footer {
     p {
         margin: 0;
     }
+}
+
+pre {
+    width: 100%;
+    padding: 1em;
 }

@@ -1,0 +1,96 @@
+<h2 id="building-a-simple-site"><a href="#building-a-simple-site">ii. building a simple site</a></h2>
+<p>
+    Let's get started by building a very simple site first, with only a simple index file:
+</p>
+
+<pre>
+$ mkdir my-site/
+$ cd my-site/
+$ echo "hello, world" &gt; index.html
+</pre>
+
+<p>
+    In order to build it, we simply invoke <code>mrbones</code>. It only takes one argument (the
+    source directory of the site), but if we omit it it picks the <b>current directory</b> by
+    default:
+</p>
+
+<pre>
+$ mrbones
+[mrbones]  Setting up output directory '/home/plumtrie/my-site/_site'...
+[mrbones]  Copying site content...
+[mrbones]  Generating pages...
+[mrbones]  Done! Site is ready at '/home/plumtrie/my-site/_site'.
+</pre>
+
+<p>
+    If we look at <code>_site</code>, not much seems to have happened; <code>mrbones</code> simply
+    copies our <code>index.html</code> file over.
+</p>
+
+<pre>
+$ ls _site/
+index.html
+$ cat _site/index.html
+hello, world
+</pre>
+
+<p>
+    Let's add some more files. For example, maybe our site has various assets, such as CSS files, or
+    also static files like text or images:
+</p>
+
+<pre>
+$ mkdir assets/ css/
+$ echo "hello" &gt; assets/message.txt
+$ echo "body { font-size: 16pt; }" &gt; css/main.css
+</pre>
+
+<p>
+    If we build the site again, we will observe that <code>mrbones</code> has simply moved all of
+    our files to the <code>_site</code> directory, in their corresponding directories. This is
+    because the site does not make use of any special features of <code>mrbones</code> for now.
+    Let's change that by adding another page:
+</p>
+
+<pre>
+$ echo "today I made a site" &gt; news.html
+$ mrbones
+[mrbones]  Setting up output directory '/home/plumtrie/my-site/_site'...
+[mrbones]  Copying site content...
+[mrbones]  Generating pages...
+[mrbones]  Done! Site is ready at '/home/plumtrie/my-site/_site'.
+$ ls _site
+assets css index.html news news.html
+$ ls _site/news
+index.html
+</pre>
+
+<p>
+    As we can see, HTML pages (specifically, files ending in <code>.html</code> or
+    <code>.htm</code>) are treated separately, while everything else simply gets copied over.
+    Furthermore, it seems that <code>mrbones</code> did not only copy over <code>news.html</code>,
+    but also created a copy of it which it placed at <code>news/index.html</code>. In fact, we can
+    see this information if we run it in verbose mode:
+</p>
+
+<pre>
+$ mrbones --verbose
+[mrbones]  Setting up output directory '/home/plumtrie/my-site/_site'...
+[mrbones]    Removing '/home/plumtrie/my-site/_site/'...
+[mrbones]    Creating '/home/plumtrie/my-site/_site/'...
+[mrbones]  Copying site content...
+[mrbones]  Generating pages...
+[mrbones]    Generating page 'index.html'...
+[mrbones]      Putting page in '_site/index.html'...
+[mrbones]    Generating page 'news.html'...
+[mrbones]      Putting page in '_site/news.html'...
+[mrbones]      Creating page copy in '_site/news/index.html'...
+[mrbones]  Done! Site is ready at '/home/plumtrie/my-site/_site'.
+</pre>
+
+<p>
+    This is done automatically to allow endpoints to be more lenient when serving the website. This
+    way, when a user visits <code>/news</code> (as opposed to <code>/news.html</code>, they will be
+    served <code>_site/news/index.html</code> instead of getting a 404 error.
+</p>

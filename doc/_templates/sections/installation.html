@@ -1,0 +1,90 @@
+<h2 id="installation"><a href="#installation">i. installation</a></h2>
+<h3 id="dependencies"><a href="#dependencies">i.a. dependencies</a></h3>
+<p>
+    The following dependencies must be installed on your system for <code>mrbones</code> to work:
+    <ul>
+        <li>
+            <a href="https://www.gnu.org/software/bash/">GNU Bash</a>, version <b>4.4 or newer</b>
+        </li>
+        <li>
+            <code>realpath</code>, <code>sort</code> (from
+            <a href="https://www.gnu.org/software/coreutils/">GNU coreutils</a>)
+        </li>
+        <li>
+            <code>find</code> (from
+            <a href="https://www.gnu.org/software/findutils/">GNU findutils</a>)
+        </li>
+    </ul>
+
+    If you wish to <a href="#normal-install">wish to use the Makefile to install</a>
+    <code>mrbones</code>, then you will also need the following:
+
+    <ul>
+        <li><a href="https://git-scm.com/downloads">Git</a> (to clone the repo)</li>
+        <li><a href="https://www.gnu.org/software/make/">GNU Make</a> (to use the Makefile)</li>
+    </ul>
+
+</p>
+
+<h3 id="normal-install"><a href="#normal-install">i.b. normal install</a></h3>
+<p>
+    The suggested way of installing is via the Makefile. First, obtain a clone of the
+    <code>mrbones</code> repo via Git:
+</p>
+
+<pre>
+$ git clone https://github.io/kokkonisd/mrbones.git
+$ cd mrbones/
+</pre>
+
+<p>
+    Then, you should probably check out a specific tag, associated to a stable version of
+    <code>mrbones</code>. You can see all existing tags by running <code>git tag</code>. For
+    instance, this is how you would check out the tag or version <code>0.3.0</code>:
+</p>
+
+<pre>
+$ git checkout 0.3.0
+</pre>
+
+<p>
+    Now you can install <code>mrbones</code> via the Makefile. This needs root privileges, so you
+    will probably have to run it with <code>sudo</code>:
+</p>
+
+<pre>
+$ sudo make install  # you can optionally set DESTDIR=/path/to/install/dir
+</pre>
+
+<p>
+    You can check to make sure that the installation succeeded by running the following command:
+</p>
+
+<pre>
+$ mrbones --version
+mrbones 0.3.0 (build &lt;ref&gt;)
+</pre>
+
+<h3 id="use-from-repo"><a href="#use-from-repo">i.c. direct use from the repo</a></h3>
+<p>
+    Since <code>mrbones</code> is a single Bash script, you can also simply use it by running it
+    with Bash, either locally:
+</p>
+
+<pre>
+$ bash /path/to/mrbones/mrbones.sh --version
+</pre>
+
+<p>
+    Or, you can even run it remotely from the repo URL (downloading it via
+    <a href="https://curl.se/">cURL</a> for example):
+</p>
+
+<pre>
+$ bash <(curl https://raw.githubusercontent.com/kokkonisd/mrbones/main/mrbones.sh) --version
+</pre>
+
+<p>
+    This last method is not recommended for stable use, though, as running Bash scripts downloaded
+    from an endpoint you don't control is generally a bad idea.
+</p>
