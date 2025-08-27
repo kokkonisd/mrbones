@@ -231,7 +231,7 @@ main() {
     )
     for file_path in "${site_content[@]}"
     do
-        rel_file_path="${file_path##"$WORKING_DIR/"}"
+        rel_file_path="${file_path##"$WORKING_DIR"}"
         parent_dir_path="$SITE_DIR/${rel_file_path%/*}"
         mkdir -p "$parent_dir_path"
         cp "$file_path" "$parent_dir_path"
