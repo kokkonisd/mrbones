@@ -345,7 +345,7 @@ main() {
                 if [[ $page_content =~ $end_regex_full ]]
                 then
                     end_match="${BASH_REMATCH[0]}"
-                    section_regex="$begin_match"$'\n'"(|.+"$'\n'")$end_match"
+                    section_regex="$begin_match"$'\n'"(|.+)"$'\n'"$end_match"
 
                     if [[ $page_content =~ $section_regex ]]
                     then
