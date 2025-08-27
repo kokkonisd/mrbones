@@ -2,7 +2,7 @@
 
 
 ## mrbones --- a bare-bones static site generator
-## mrbones by Dimitri Kokkonis  is licensed under a Creative Commons Attribution-ShareAlike 4.0
+## mrbones by Dimitri Kokkonis is licensed under a Creative Commons Attribution-ShareAlike 4.0
 ## International License. See the accompanying LICENSE file for more info.
 
 
