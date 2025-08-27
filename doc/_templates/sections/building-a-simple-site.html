@@ -10,9 +10,7 @@ $ echo "hello, world" &gt; index.html
 </pre>
 
 <p>
-    In order to build it, we simply invoke <code>mrbones</code>. It only takes one argument (the
-    source directory of the site), but if we omit it it picks the <b>current directory</b> by
-    default:
+    In order to build it, we simply invoke <code>mrbones</code>:
 </p>
 
 <pre>
@@ -22,6 +20,13 @@ $ mrbones
 [mrbones]  Generating pages...
 [mrbones]  Done! Site is ready at '/home/plumtrie/my-site/_site'.
 </pre>
+
+<div class="note">
+    <p>
+        <code>mrbones</code> takes one argument: the path to the source directory of the site. If
+        no argument is provided, then the <b>current directory</b> is used by default.
+    </p>
+</div>
 
 <p>
     If we look at <code>_site</code>, not much seems to have happened; <code>mrbones</code> simply

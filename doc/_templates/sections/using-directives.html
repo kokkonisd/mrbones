@@ -1,0 +1,426 @@
+<h2 id="using-directives"><a href="#using-directives">iii. using directives</a></h2>
+<p>
+    Sites often have quite a bit of repetition, which we would like to avoid (re)coding by hand. To
+    this end, <code>mrbones</code> offers a variety of directives, which we'll explore below.
+</p>
+
+<div class="note">
+    <p>
+        All <code>mrbones</code> directives start with a '@' character. If you wish to escape
+        them&emdash;as we have to do in this very documentation!&emdash;then use whatever means the
+        language of the file provides: both <code>&amp;#64;</code> or <code>\@</code> should do the
+        trick.
+    </p>
+</div>
+
+<h3 id="the-permalink-directive">
+    <a href="#the-permalink-directive">iii.a. the <code>@permalink</code> directive</a>
+</h3>
+<p>
+    Sometimes we might want to move pages to different locations in the final site, without
+    bothering to create a complex architecture in the source code. One such example is blog posts:
+</p>
+
+<pre>
+$ echo "this is my first post" &gt; 2025-08-27-first-post.html
+</pre>
+
+<p>
+    Let's say we want this to end up at <code>/2025/08/27/first-post.html</code>. One way would be
+    to create those directories manually, but we could also just tell <code>mrbones</code> where to
+    place the page using a <code>@permalink</code> directive:
+</p>
+
+<pre>
+$ echo "@permalink /2025/08/27/first-post.html" &gt; 2025-08-27-first-post.html
+$ echo "this is my first post" &gt;&gt; 2025-08-27-first-post.html
+$ mrbones --verbose
+...
+[mrbones]    Generating page '2025-08-27-first-post.html'...
+[mrbones]      Resolving destination (permalink)...
+[mrbones]      Putting page in '_site/2025/08/27/first-post.html'...
+[mrbones]      Creating page copy in '_site/2025/08/27/first-post/index.html'...
+...
+</pre>
+
+<div class="note">
+    <p>
+        The <code>@permalink</code> target <b>must be an absolute path</b> (i.e., starting with '/')
+        and obviously <b>is not allowed to escape the generated site directory</b>.
+    </p>
+</div>
+
+<div class="note">
+    <p>
+        The <code>@permalink</code> directive <b>must be the only element on its line</b> (no HTML
+        code after the <code>@permalink</code> target but before the newline). If there are multiple
+        <code>@permalink</code>s, <b>only the first one will be taken into account</b>.
+    </p>
+</div>
+
+<div class="note">
+    <p>
+        If use of the <code>@permalink</code> directive makes two (or more) pages point to
+        <b>the same location</b>, then the last page (alphabetically speaking) will overwrite all
+        previous pages pointing to that location, since <code>mrbones</code> <b>processes pages
+        after sorting them in alphabetic order</b>.
+    </p>
+</div>
+
+<h3 id="the-include-directive">
+    <a href="#the-include-directive">iii.b. the <code>&#64;include</code> directive</a>
+</h3>
+<p>
+    Many sites have at least one repeating element, for example the footer. In order to avoid
+    copying and pasting the same footer (plus needing to change multiple files if we ever modify
+    it), we can use the <code>&#64;include</code> directive.
+</p>
+
+<div class="note">
+    <p>
+        Targets (i.e., files) of the <code>&#64;include</code> directive <b>should be placed in the
+        <code>_templates</code> directory</b>, which has special meaning to <code>mrbones</code>:
+        all files inside this directory are not processed directly, but may be targets of
+        directives.
+    </p>
+
+    <p>
+        There are no further restrictions regarding <code>_templates/</code>: you can create
+        whatever hierarchy you want inside of it, so long as you provide <b>the relative path from
+        the root of <code>_templates/</code> as a target</b> to directives.
+    </p>
+</div>
+
+<div class="note">
+    <p>
+        The <code>&#64;include</code> directive <b>must be the only element on its line</b> (no HTML
+        code after the <code>&#64;include</code> target but before the newline). <b>Multiple
+        <code>&#64;include</code>s per file are, of course, allowed</b>.
+    </p>
+</div>
+
+<pre>
+$ mkdir _templates/
+$ echo "this is the footer" &gt; _templates/footer.html
+$ echo "&#64;include footer.html" &gt;&gt; index.html
+$ mrbones --verbose
+...
+[mrbones]    Generating page 'index.html'...
+[mrbones]      Handling `&#64;include footer.html`...
+[mrbones]      Putting page in '_site/index.html'...
+...
+</pre>
+
+<p>
+    You can also nest <code>&#64;include</code>s arbitrarily, so long as you don't create a loop:
+</p>
+
+<pre>
+$ echo -e "this is include one\n&#64;include two.html" &gt; _templates/one.html
+$ echo -e "this is include two\n&#64;include three.html" &gt; _templates/two.html
+$ echo "this is include three" &gt; _templates/three.html
+$ echo "&#64;include one.html" &gt;&gt; index.html
+$ mrbones --verbose
+...
+[mrbones]    Generating page 'index.html'...
+[mrbones]      Handling `&#64;include footer.html`...
+[mrbones]      Handling `&#64;include one.html`...
+[mrbones]      Handling `&#64;include two.html`...
+[mrbones]      Handling `&#64;include three.html`...
+[mrbones]      Putting page in '_site/index.html'...
+...
+</pre>
+
+<div class="note">
+    <p>
+        Besides other <code>&#64;include</code> directives, include target pages <b>will be copied
+        verbatim</b>. For example, a <code>@permalink</code> directive inside an
+        <code>&#64;include</code> target will not work: it will be treated as normal text.
+    </p>
+</div>
+
+<h3 id="the-use-directive">
+    <a href="#the-use-directive">iii.a. the <code>@use</code> directive</a>
+</h3>
+
+<p>
+    The ability to <a href="#the-include-directive">include</a> snippets is very useful, but
+    sometimes what we need is more akin to a <i>template</i>. For example, essentially all pages on
+    most websites look like this:
+</p>
+
+<pre>
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+    &lt;head&gt;
+        &lt;!-- Some stuff here... --&gt;
+    &lt;/head&gt;
+    &lt;body&gt;
+        &lt;!-- Some stuff here... --&gt;
+    &lt;/body&gt;
+&lt;/html&gt;
+</pre>
+
+<p>
+    We can achieve such templating via the <code>@use</code> directive. First, let's define the
+    template, in <code>_templates/page.html</code>:
+</p>
+
+<pre>
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+    &lt;head&gt;
+        @content.head
+    &lt;/head&gt;
+    &lt;body&gt;
+        @content.body
+    &lt;/body&gt;
+&lt;/html&gt;
+</pre>
+
+<p>
+    The <code>@content.head</code> and <code>@content.body</code> instruct the template to fill in
+    these spots with whatever the page <i>using</i> the template defines as <code>head</code> and
+    <code>body</code>. For example, let's rewrite our <code>index.html</code> page to use the
+    template:
+</p>
+
+<pre>
+@use page.html
+
+@begin head
+&lt;title&gt;hello, world&lt;/title&gt;
+@end head
+
+@begin body
+&lt;p&gt;this is my site&lt;/p&gt;
+@end body
+</pre>
+
+<p>
+    If we build with <code>mrbones</code>, we can observe how the template is filled in:
+</p>
+
+<pre>
+$ mrbones
+$ cat _site/index.html
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+    &lt;head&gt;
+        &lt;title&gt;hello, world&lt;/title&gt;
+    &lt;/head&gt;
+    &lt;body&gt;
+        &lt;p&gt;this is my site&lt;/p&gt;
+    &lt;/body&gt;
+&lt;/html&gt;
+</pre>
+
+<div class="note">
+    <p>
+        The <code>@use</code> directive <b>must be the only element on its line</b> (no HTML code
+        after the <code>@use</code> target but before the newline). If there are multiple
+        <code>@use</code>s, <b>only the first one will be taken into account</b>.
+    </p>
+</div>
+
+<div class="note">
+    <p>
+        You can name the various <i>sections</i> (i.e., what comes after <code>@content.</code>)
+        whatever you like, but <b>only using characters 'a-z', 'A-Z', '0-9', '_' and '-'</b>.
+    </p>
+</div>
+
+<div class="note">
+    <p>
+        You don't have to provide a matching
+        <code>@begin &lt;SECTION&gt; ... @end &lt;SECTION&gt;</code> for every
+        <code>@content.&lt;SECTION&gt;</code> if you don't want to. If you don't provide it,
+        <code>@content.&lt;SECTION&gt;</code> will simply be <b>removed</b> in the final page.
+    </p>
+
+    <p>
+        Symmetrically, you may define <code>@begin &lt;SECTION&gt; ... @end &lt;SECTION&gt;</code>
+        without a <code>@content.&lt;SECTION&gt;</code> in the template. It will simply be
+        <b>ignored</b>.
+    </p>
+</div>
+
+<div class="note">
+    <p>
+        <b>Do not provide multiple implementations for a given section</b>. For example, consider
+        the following:
+    </p>
+
+<pre>
+@begin main
+one
+@end main
+@begin main
+two
+@end main
+</pre>
+
+    <p>
+        That code will produce the following <code>main</code> section:
+    </p>
+
+<pre>
+one
+@end main
+@begin main
+two
+</pre>
+</div>
+
+<div class="note">
+    <p>
+        If you want an "empty implementation" for a given section, you can simply do:
+
+<pre>
+@begin &lt;SECTION&gt;
+@end &lt;SECTION&gt;
+</pre>
+
+        There needs to be <b>at least one newline</b> between <code>@begin &lt;SECTION&gt;</code>
+        and <code>@end &lt;SECTION&gt;</code>.
+    </p>
+</div>
+
+<p>
+    You can also nest <code>@use</code>s arbitrarily, so long as you don't create a loop. Let's
+    make a new template, <code>_templates/basic.html</code>:
+</p>
+
+<pre>
+@use page.html
+
+@begin head
+&lt;title&gt;@content.title | my site&lt;/title&gt;
+@end head
+
+@begin body
+&lt;main&gt;
+    @content.main
+&lt;/main&gt;
+@end body
+</pre>
+
+<p>
+    And then rewrite <code>index.html</code> to use it:
+</p>
+
+<pre>
+@use basic.html
+
+@begin title
+home
+@end title
+
+@begin main
+&lt;p&gt;this is my site&lt;/p&gt;
+@end main
+</pre>
+
+<p>
+    Again, if we now build with <code>mrbones</code> we should see both templates being filled in:
+</p>
+
+<pre>
+$ mrbones
+$ cat _site/index.html
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+    &lt;head&gt;
+        &lt;title&gt;home | my site&lt;/title&gt;
+    &lt;/head&gt;
+    &lt;body&gt;
+        &lt;main&gt;
+    &lt;p&gt;this is my site&lt;/p&gt;
+&lt;/main&gt;
+    &lt;/body&gt;
+&lt;/html&gt;
+</pre>
+
+<div class="note">
+    <p>
+        If you want to "propagate" content up the <code>@use</code> chain, <b>you have to redefine
+        sections</b>. Consider the following example:
+    </p>
+
+<pre>
+$ cat _templates/one.html
+@use two.html
+$ cat _templates/two.html
+@content.main
+$ cat index.html
+@use one.html
+@begin main
+this is the main
+@end main
+$ mrbones
+$ cat _site/index.html
+
+</pre>
+
+    <p>
+        If we want to propagate <code>"this is the main"</code>, we have to redefine
+        <code>main</code> in <code>_templates/one.html</code>:
+    </p>
+
+<pre>
+$ cat _templates/one.html
+@use two.html
+@begin main
+@content.main
+@end main
+$ cat _templates/two.html
+@content.main
+$ cat index.html
+@use one.html
+@begin main
+this is the main
+@end main
+$ mrbones
+$ cat _site/index.html
+this is the main
+</pre>
+</div>
+
+<p>
+    Finally, we can of course add back our footer via the <code>&#64;include</code> directive. We
+    will modify <code>_templates/page.html</code>:
+</p>
+
+<pre>
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+    &lt;head&gt;
+        @content.head
+    &lt;/head&gt;
+    &lt;body&gt;
+        @content.body
+        &#64;include footer.html
+    &lt;/body&gt;
+&lt;/html&gt;
+</pre>
+
+<p>
+    Again, we can see that it works:
+</p>
+
+<pre>
+$ mrbones
+$ cat _site/index.html
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+    &lt;head&gt;
+        &lt;title&gt;home | my site&lt;/title&gt;
+    &lt;/head&gt;
+    &lt;body&gt;
+        &lt;main&gt;
+    &lt;p&gt;this is my site&lt;/p&gt;
+&lt;/main&gt;
+        this is the footer
+    &lt;/body&gt;
+&lt;/html&gt;
+</pre>

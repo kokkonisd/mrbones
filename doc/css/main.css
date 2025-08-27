@@ -30,9 +30,10 @@ pre, code {
     font-size: var(--code-font-size);
 
     padding: 1pt 4pt;
-    color: var(--code-color);
+    color: var(--background-color);
     background-color: var(--code-background-color);
 }
+
 
 ol {
     list-style: none;
@@ -49,13 +50,15 @@ hgroup,h1, h2, h3, h4, h5, h6 {
 hgroup {
     background-color: var(--header-background-color);
     text-align: center;
+    padding: 1em 0;
 
-    h1 {
-        margin: 0px;
+    a, h1, .subtitle {
+        display: block;
+        width: fit-content;
+        margin: 0 auto;
     }
 
-    p.subtitle {
-        margin: 0px;
+    .subtitle {
         font-size: 1.5em;
         font-style: italic;
     }
@@ -66,17 +69,19 @@ h2, h3 :not(.no-link) {
     list-style-type: none;
     width: fit-content;
 
-    border-bottom: 2px dotted var(--extra-color);
+    border-bottom: 2px dotted var(--extra-color-2);
 
     &:hover::marker {
         content: "§  ";
         color: rgba(0, 0, 0, 30%);
     }
 
-}
-
-h2:not(.no-link) {
-    margin-top: 2em;
+    code {
+        color: inherit;
+        background-color: inherit;
+        display: inline;
+        border: none;
+    }
 }
 
 main {
@@ -103,6 +108,20 @@ footer {
 }
 
 pre {
-    width: 100%;
     padding: 1em;
+    max-width: 100%;
+
+    a, a:visited, a:hover {
+        color: inherit;
+        text-decoration: underline;
+    }
+}
+
+.note {
+    padding: 0.1em 1em;
+    margin: 0.8em auto;
+    max-width: 100%;
+    border-left: 0.4em solid var(--extra-color-2);
+    background: linear-gradient(rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.7)),
+        var(--extra-color-2);
 }
