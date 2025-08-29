@@ -4,8 +4,10 @@
 :root {
     --text-font: "Kreon Variable";
     --main-font-size: 16pt;
+    --main-font-size-mobile: 14pt;
     --code-font: "Courier Prime";
     --code-font-size: 14pt;
+    --code-font-size-mobile: 12pt;
 
     --background-color: #F5DDB8;
     --header-background-color: #D0AC76;

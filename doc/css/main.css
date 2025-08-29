@@ -6,8 +6,12 @@ html body {
     padding: 0;
 
     font-family: var(--text-font);
-    font-size: var(--main-font-size);
+    font-size: var(--main-font-size-mobile);
     background-color: var(--background-color);
+
+    @media only screen and (min-width: 768px) {
+        font-size: var(--main-font-size);
+    }
 }
 
 a {
@@ -27,7 +31,11 @@ a {
 
 pre, code {
     font-family: var(--code-font);
-    font-size: var(--code-font-size);
+    font-size: var(--code-font-size-mobile);
+
+    @media only screen and (min-width: 768px) {
+        font-size: var(--code-font-size);
+    }
 
     padding: 1pt 4pt;
     color: var(--background-color);
@@ -37,7 +45,7 @@ pre, code {
 
 ol {
     list-style: none;
-    padding-left: 0px;
+    padding-left: 0;
 }
 
 hgroup,h1, h2, h3, h4, h5, h6 {
@@ -86,7 +94,7 @@ h2, h3 :not(.no-link) {
 
 main {
     margin: 0 auto;
-    width: 100%;
+    width: 90%;
 
     @media only screen and (min-width: 768px) {
         width: 60%;
@@ -99,7 +107,7 @@ footer {
     margin-bottom: 1em;
 
     hr {
-        margin-top: 0px;
+        margin-top: 0;
     }
 
     p {
@@ -110,6 +118,7 @@ footer {
 pre {
     padding: 1em;
     max-width: 100%;
+    overflow: scroll;
 
     a, a:visited, a:hover {
         color: inherit;
