@@ -26,7 +26,7 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout site repo
+      - name: Checkout mrbones repo
         uses: actions/checkout@v4
       - name: Install dependencies
         # Install mrbones.
@@ -37,7 +37,7 @@ jobs:
         run: ./mrbones --verbose --color=always doc
       - name: Setup Pages
         uses: actions/configure-pages@v4
-      - name: Upload site
+      - name: Upload documentation site
         uses: actions/upload-pages-artifact@v3
         with:
           # Upload the site folder
