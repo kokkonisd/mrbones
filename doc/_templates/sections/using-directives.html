@@ -8,7 +8,7 @@
     <p>
         All <code>mrbones</code> directives start with a '@' character. If you wish to escape
         them&mdash;as we have to do in this very documentation!&mdash;then use whatever means the
-        language of the file provides: both <code>&amp;#64;</code> or <code>\@</code> should do the
+        language of the file provides: <code>&amp;#64;</code> or <code>\@</code> should do the
         trick.
     </p>
 </div>
@@ -18,7 +18,8 @@
 </h3>
 <p>
     Sometimes we might want to move pages to different locations in the final site, without
-    bothering to create a complex architecture in the source code. One such example is blog posts:
+    bothering to create a complex directory structure in the source code. One such example is blog
+    posts:
 </p>
 
 <pre>
@@ -146,7 +147,7 @@ $ mrbones --verbose
 <p>
     The ability to <a href="#the-include-directive">include</a> snippets is very useful, but
     sometimes what we need is more akin to a <i>template</i>. For example, essentially all pages on
-    most websites look like this:
+    most sites look like this:
 </p>
 
 <pre>
@@ -424,3 +425,9 @@ $ cat _site/index.html
     &lt;/body&gt;
 &lt;/html&gt;
 </pre>
+
+<div class="note">
+    <p>
+        You cannot use <code>@permalink</code> directives inside of <code>@use</code> targets.
+    </p>
+</div>

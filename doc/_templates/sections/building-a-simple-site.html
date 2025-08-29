@@ -42,7 +42,7 @@ hello, world
 
 <p>
     Let's add some more files. For example, maybe our site has various assets, such as CSS files, or
-    also static files like text or images:
+    even static files like text or images:
 </p>
 
 <pre>
@@ -72,11 +72,9 @@ index.html
 </pre>
 
 <p>
-    As we can see, HTML pages (specifically, files ending in <code>.html</code> or
-    <code>.htm</code>) are treated separately, while everything else simply gets copied over.
-    Furthermore, it seems that <code>mrbones</code> did not only copy over <code>news.html</code>,
-    but also created a copy of it which it placed at <code>news/index.html</code>. In fact, we can
-    see this information if we run it in verbose mode:
+    It seems that <code>mrbones</code> did not only copy over <code>news.html</code>, but also
+    created a copy of it which it placed at <code>news/index.html</code>. In fact, we can
+    see this information if we build the site in verbose mode:
 </p>
 
 <pre>
@@ -95,7 +93,16 @@ $ mrbones --verbose
 </pre>
 
 <p>
-    This is done automatically to allow endpoints to be more lenient when serving the website. This
+    This is done automatically to allow endpoints to be more lenient when serving the site. That
     way, when a user visits <code>/news</code> (as opposed to <code>/news.html</code>, they will be
     served <code>_site/news/index.html</code> instead of getting a 404 error.
 </p>
+
+<div class="note">
+    <p>
+        <code>mrbones</code> treats files ending in <code>.html</code> or <code>.htm</code>
+        differently, as we will see in the <a href="#using-directives">directives</a> section. It
+        copies everything else over as-is, and completely ignores everything in the
+        <code>_templates/</code> directory.
+    </p>
+</div>
