@@ -5,6 +5,7 @@
 - Rework `@use` to make it more flexible
 - Get rid of the `sed` dependency entirely
 - Remove recursive functions to make building considerably faster
+- Add documentation
 
 # 0.2.1
 
