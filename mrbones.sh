@@ -457,7 +457,8 @@ main() {
         #
         # This procedure shall be done on all pages except the ones titled 'index.html', since those
         # have a special meaning anyway (and creating an `index/` subdirectory would be redundant).
-        if [[ $rel_src_page_path != "index.html" ]]
+        page_filename="${dest_page_path##*/}"
+        if [[ $page_filename != "index.html" && $page_filename != "index.htm" ]]
         then
             page_filename="${dest_page_path##*/}"
             page_name="${page_filename%%.*}"
