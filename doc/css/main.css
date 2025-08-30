@@ -118,7 +118,7 @@ footer {
 pre {
     padding: 1em;
     max-width: 100%;
-    overflow: scroll;
+    overflow: auto;
 
     a, a:visited, a:hover {
         color: inherit;
