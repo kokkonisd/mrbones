@@ -1,5 +1,9 @@
 # Changelog
 
+# 0.3.1
+
+- Reinforce path traversal checks
+
 # 0.3.0
 
 - Rework `@use` to make it more flexible
