@@ -212,6 +212,20 @@ main() {
 
     check_dependencies
     parse_arguments "$@"
+
+    # Check that both the `$TEMPLATES_DIR` and the `$SITE_DIR` are not symbolic links. If they are,
+    # then various path traversal attacks are possible (e.g., setting `$TEMPLATES_DIR` to `/etc` and
+    # doing something like `@include passwd`).
+    if [[ -L $TEMPLATES_DIR ]]
+    then
+        error "the templates directory ($TEMPLATES_DIR) cannot be a symbolic link."
+    fi
+
+    if [[ -L $SITE_DIR ]]
+    then
+        error "the generated site directory ($SITE_DIR) cannot be a symbolic link."
+    fi
+
     info_message "Setting up output directory '$SITE_DIR'..."
     verbose_message "  Removing '$SITE_DIR/'..."
     rm -rf "$SITE_DIR"
@@ -288,15 +302,15 @@ main() {
                 permalink_target="$permalink_target.html"
             fi
 
-            # ".." is not allowed in the permalink.
-            if [[ $permalink_target == *..* ]]
-            then
-                error "$src_page_path: \`@permalink $raw_permalink_target\`: '..' is not allowed" \
-                    "in permalinks."
-            fi
-
             # Remove the leading '/' of the permalink.
             dest_page_path="$SITE_DIR/${permalink_target#/*}"
+
+            # Permalinks are not allowed to escape the generated site.
+            if [[ ! $(realpath -m "$dest_page_path") == $(realpath -m "$SITE_DIR")/* ]]
+            then
+                error "$src_page_path: \`@permalink $raw_permalink_target\`: permalink would" \
+                    "escape the generated site."
+            fi
         fi
 
 
@@ -307,6 +321,14 @@ main() {
         do
             use_target="${BASH_REMATCH[1]}"
             verbose_message "    Handling \`@use $use_target\`..."
+
+            # Check that the use target does not escape `$TEMPLATES_DIR`.
+            if [[ ! \
+                $(realpath -m "$TEMPLATES_DIR/$use_target") == $(realpath -m "$TEMPLATES_DIR")/* \
+            ]]
+            then
+                error "$src_page_path: \`@use $use_target\`: use would escape the generated site."
+            fi
 
             # Check that the use target exists.
             if [[ ! -f "$TEMPLATES_DIR/$use_target" ]]
@@ -402,6 +424,16 @@ main() {
             include_match="${BASH_REMATCH[0]}"
             include_target="${BASH_REMATCH[1]}"
             verbose_message "    Handling \`@include $include_target\`..."
+
+            # Check that the include target does not escape `$TEMPLATES_DIR`.
+            if [[ ! \
+                $(realpath -m "$TEMPLATES_DIR/$include_target") \
+                == $(realpath -m "$TEMPLATES_DIR")/* \
+            ]]
+            then
+                error "$src_page_path: \`@include $include_target\`: include would escape the" \
+                    "generated site."
+            fi
 
             # Check that the include target exists.
             if [[ ! -f "$TEMPLATES_DIR/$include_target" ]]
